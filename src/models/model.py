@@ -51,7 +51,7 @@ class LatentModel(nn.Module):
         dropout=0,
     ):
 
-        super(LatentModel, self).__init__()
+        super().__init__()
 
         self._latent_encoder = LatentEncoder(
             x_dim + y_dim,
@@ -78,6 +78,7 @@ class LatentModel(nn.Module):
             x_dim,
             y_dim,
             hidden_dim=hidden_dim,
+            latent_dim=latent_dim,
             n_decoder_layers=n_decoder_layers,
             dropout=dropout,
         )
@@ -87,9 +88,12 @@ class LatentModel(nn.Module):
 
         dist_prior, log_var_prior = self._latent_encoder(context_x, context_y)
 
-        if target_y is not None:
+        if (target_y is not None):
             dist_post, log_var_post = self._latent_encoder(target_x, target_y)
-            z = dist_post.rsample()
+            if self.training:
+                z = dist_post.rsample()
+            else:
+                z = dist_post.loc
         else:
             z = (
                 dist_prior.loc
@@ -115,5 +119,6 @@ class LatentModel(nn.Module):
             kl_loss = None
             loss = None
 
-        return dist.rsample(), kl_loss, loss, dist.scale
+        y_pred = dist.rsample() if self.training else dist.loc
+        return y_pred, kl_loss, loss, dist.scale
 

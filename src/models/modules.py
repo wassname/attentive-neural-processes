@@ -7,7 +7,7 @@ class NPBlockRelu2d(nn.Module):
     """Block for Neural Processes."""
 
     def __init__(self, in_channels, out_channels, dropout=0, norm=True):
-        super(NPBlockRelu2d, self).__init__()
+        super().__init__()
         self.linear = nn.Linear(in_channels, out_channels)
         self.act = nn.ReLU()
         self.dropout = nn.Dropout2d(dropout)
@@ -101,7 +101,7 @@ class LatentEncoder(nn.Module):
         min_std=0.1,
         dropout=0,
     ):
-        super(LatentEncoder, self).__init__()
+        super().__init__()
         self._input_layer = NPBlockRelu2d(input_dim, hidden_dim, dropout)
         self._encoder = nn.Sequential(
             *[
@@ -119,7 +119,6 @@ class LatentEncoder(nn.Module):
 
     def forward(self, x, y):
         encoder_input = torch.cat([x, y], dim=-1)
-
         encoded = self._input_layer(encoder_input)
 
         encoded = self._encoder(encoded)
@@ -153,7 +152,7 @@ class DeterministicEncoder(nn.Module):
         dropout=0,
         n_heads=8,
     ):
-        super(DeterministicEncoder, self).__init__()
+        super().__init__()
         self._input_layer = NPBlockRelu2d(input_dim, hidden_dim, dropout)
         self._d_encoder = nn.Sequential(
             *[
@@ -194,22 +193,21 @@ class Decoder(nn.Module):
         min_std=0.1,
         dropout=0,
     ):
-        super(Decoder, self).__init__()
+        super().__init__()
         self._target_transform = NPBlockRelu2d(x_dim, hidden_dim, dropout)
-        hidden_dim_2 = 2 * hidden_dim + latent_dim
+        hidden_dim_2 = 2* hidden_dim + latent_dim
         self._decoder = nn.Sequential(
             *[
                 NPBlockRelu2d(hidden_dim_2, hidden_dim_2, dropout)
                 for _ in range(n_decoder_layers)
             ]
         )
-        self._mean = nn.Linear(2 * hidden_dim + latent_dim, y_dim)
-        self._std = nn.Linear(2 * hidden_dim + latent_dim, y_dim)
+        self._mean = nn.Linear(hidden_dim_2, y_dim)
+        self._std = nn.Linear(hidden_dim_2, y_dim)
         self.min_std = min_std
 
     def forward(self, r, z, target_x):
         x = self._target_transform(target_x)
-
         representation = torch.cat([torch.cat([r, z], dim=-1), x], dim=-1)
         representation = self._decoder(representation)
 

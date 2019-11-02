@@ -54,8 +54,13 @@ class SmartMeterDataSet(torch.utils.data.Dataset):
 
     def __getitem__(self, i):
         rows = self.df.iloc[i : i + (self.num_context + self.num_extra_target)].copy()
-# (df['tstp'] -  df['tstp'].iloc[0]).dt.total_seconds()
-        rows['tstp'] = (rows['tstp'] - rows['tstp'].iloc[0]).dt.total_seconds() /  86400.0
+        rows['tstp'] = (rows['tstp'] - rows['tstp'].iloc[0]).dt.total_seconds() / 86400.0
+        rows = rows.sort_values('tstp')
+
+        # make sure tstp, which is our x axis, is the first value
+        columns = ['tstp'] + list(set(rows.columns) - set(['tstp']))
+        rows = rows[columns]
+
         x = rows.drop(columns=self.label_names).values
         y = rows[self.label_names].values
         return x, y
