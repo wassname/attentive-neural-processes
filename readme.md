@@ -1,16 +1,10 @@
 # Using attentive neural processes for forecasting power usage
 
-This project uses attentive neural processes (ANP) for on kaggle smart meter data. The ANP code used here it more flexible and stable than other pytorch ANP implementations available as of 20191101.
+This project uses [Attentive Neural Process](https://arxiv.org/abs/1901.05761) (ANP) on kaggle smart meter data.
 
-Changes for stability:
-- in eval mode, take mean of latent space, and mean output, don't sample
-- use log_variance where possible
-  - and add a minimum bound to std (in log domain) to avoid mode collapse
-- use pytorch attention (which has dropout)
-- use batchnorm and dropout on channel dimensions
-- added log_prob loss
-- check and skip nonfinite values because for extreme inputs we can still get nan's
+![](docs/anp.png)
 
+This repo also includes ANP code that is more flexible and stable than other pytorch ANP implementations available now (as of 2019-11-01).
 
 ## Usage
 
@@ -32,6 +26,20 @@ Here the black dots are input data, the dotted line is the true data. The blue l
 ![](docs/5.png)
 
 ![](docs/6.png)
+
+
+## Code
+
+This is based on the code listed in the next section, with some changes. The most notable ones add stability:
+
+Changes for stability:
+- in eval mode, take mean of latent space, and mean output, don't sample
+- use log_variance where possible
+  - and add a minimum bound to std (in log domain) to avoid mode collapse
+- use pytorch attention (which has dropout)
+- use batchnorm and dropout on channel dimensions
+- use log_prob loss
+- check and skip nonfinite values because for extreme inputs we can still get nan's
 
 
 ## See also:
