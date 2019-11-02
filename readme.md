@@ -1,4 +1,6 @@
-Using attentive neural process for forecasting smartmeter data in pytorch
+# Using attentive neural processes for forecasting power usage
+
+This project uses attentive neural processes (ANP) for on kaggle smart meter data. The ANP code used here it more flexible and stable than other pytorch ANP implementations available as of 20191101.
 
 Changes for stability:
 - in eval mode, take mean of latent space, and mean output, don't sample
@@ -10,17 +12,16 @@ Changes for stability:
 - check and skip nonfinite values because for extreme inputs we can still get nan's
 
 
-# Usage:
+## Usage
 
-
-- see requirements.txt for requirements
-- Download data from https://www.kaggle.com/jeanmidev/smart-meters-in-london/version/11
-  - Unzip smart-meters-in-london.zip
-  - unzip data/smart-meters-in-london/halfhourly_dataset.zip
-  - You should now have the file: `./data/smart-meters-in-london/halfhourly_dataset/block_0.csv`
+- clone this repository
+- see requirements.txt for requirements and version
 - Start and run the notebook [smartmeters.ipynb](https://github.com/wassname/attentive-neural-processes/blob/master/smartmeters.ipynb)
 
-# Example outputs:
+## Data
+- Some data is included, you can get more from https://www.kaggle.com/jeanmidev/smart-meters-in-london/version/11
+
+## Example outputs
 
 Here the black dots are input data, the dotted line is the true data. The blue line is the prediction, and the blue shadow is the uncertainty.
 
@@ -30,10 +31,10 @@ Here the black dots are input data, the dotted line is the true data. The blue l
 
 ![](docs/5.png)
 
-![](docs/train.png)
+![](docs/6.png)
 
 
-# See also:
+## See also:
 
 - Original code in tensorflow: https://github.com/deepmind/neural-processes/blob/master/attentive_neural_process.ipynb
 - First pytorch implementation: https://github.com/soobinseo/Attentive-Neural-Process/blob/master/network.py
