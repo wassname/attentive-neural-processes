@@ -49,9 +49,15 @@ class LatentModel(nn.Module):
         n_decoder_layers=3,
         num_heads=8,
         dropout=0,
+        attention_dropout=0,
+        min_std=0.1,
+        use_lvar=True,
+        use_deterministic_path=True
     ):
 
         super().__init__()
+        self.use_lvar = use_lvar
+        self.use_deterministic_path = use_deterministic_path
 
         self._latent_encoder = LatentEncoder(
             x_dim + y_dim,
@@ -60,7 +66,10 @@ class LatentModel(nn.Module):
             self_attention_type=latent_enc_self_attn_type,
             n_encoder_layers=n_latent_encoder_layers,
             dropout=dropout,
+            attention_dropout=attention_dropout,
             n_heads=num_heads,
+            min_std=min_std,
+            use_lvar=use_lvar
         )
 
         self._deterministic_encoder = DeterministicEncoder(
@@ -71,6 +80,7 @@ class LatentModel(nn.Module):
             cross_attention_type=det_enc_cross_attn_type,
             n_d_encoder_layers=n_det_encoder_layers,
             dropout=dropout,
+            attention_dropout=attention_dropout,
             n_heads=num_heads,
         )
 
@@ -81,6 +91,8 @@ class LatentModel(nn.Module):
             latent_dim=latent_dim,
             n_decoder_layers=n_decoder_layers,
             dropout=dropout,
+            min_std=min_std,
+            use_lvar=use_lvar
         )
 
     def forward(self, context_x, context_y, target_x, target_y=None):
@@ -93,24 +105,32 @@ class LatentModel(nn.Module):
             if self.training:
                 z = dist_post.rsample()
             else:
+                # instead of sampling, in test mode take the mean, this will make it more deterministic
                 z = dist_post.loc
         else:
-            z = (
-                dist_prior.loc
-            )  # instead of sampling, in test mode take the mean, this will make it more deterministic
+            z = dist_prior.loc
 
         z = z.unsqueeze(1).repeat(1, num_targets, 1)  # [B, T_target, H]
-        r = self._deterministic_encoder(
-            context_x, context_y, target_x
-        )  # [B, T_target, H]
+
+        if self.use_deterministic_path:
+            r = self._deterministic_encoder(
+                context_x, context_y, target_x
+            )  # [B, T_target, H]
+        else:
+            r = None
         dist, log_sigma = self._decoder(r, z, target_x)
+
         if target_y is not None:
-            # Log likelihood has shape (batch_size, num_target, y_dim).
-            log_p = log_prob_sigma(target_y, dist.loc, log_sigma).mean(-1)
-            #  KL has shape (batch_size, r_dim)
-            kl_loss = kl_loss_var(
-                dist_prior.loc, log_var_prior, dist_post.loc, log_var_post
-            ).mean(-1)
+            if self.use_lvar:
+                # Log likelihood has shape (batch_size, num_target, y_dim).
+                log_p = log_prob_sigma(target_y, dist.loc, log_sigma).mean(-1)
+                #  KL has shape (batch_size, r_dim)
+                kl_loss = kl_loss_var(
+                    dist_prior.loc, log_var_prior, dist_post.loc, log_var_post
+                ).mean(-1)
+            else:
+                log_p = dist.log_prob(target_y).mean(-1)
+                kl_loss = torch.distributions.kl_divergence(dist_post, dist_prior).mean(-1)
             kl_loss = kl_loss[:, None].expand(log_p.shape)
             loss = (kl_loss - log_p).mean()
 
