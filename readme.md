@@ -4,7 +4,7 @@ This project uses [Attentive Neural Process](https://arxiv.org/abs/1901.05761) (
 
 ![](docs/anp.png)
 
-This repo also includes ANP code that is more flexible and stable than other pytorch ANP implementations available now (as of 2019-11-01).
+This repository also includes a pytorch implementation that is more flexible and stable than others available now (as of 2019-11-01).
 
 ## Usage
 

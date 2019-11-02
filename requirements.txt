@@ -2,3 +2,4 @@ torch==1.2.0
 tqdm
 pandas
 numpy
+torchsummaryX
