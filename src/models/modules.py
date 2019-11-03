@@ -229,11 +229,16 @@ class Decoder(nn.Module):
         min_std=0.1,
         dropout=0,
         use_lvar=False,
+        use_deterministic_path=True
     ):
         super().__init__()
         self.use_lvar = use_lvar
         self._target_transform = NPBlockRelu2d(x_dim, hidden_dim, dropout)
-        hidden_dim_2 = 2 * hidden_dim + latent_dim
+        self.use_deterministic_path = use_deterministic_path
+        if use_deterministic_path:
+            hidden_dim_2 = 2 * hidden_dim + latent_dim
+        else:
+            hidden_dim_2 = hidden_dim + latent_dim
         self._decoder = nn.Sequential(
             *[
                 NPBlockRelu2d(hidden_dim_2, hidden_dim_2, dropout)
