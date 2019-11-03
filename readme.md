@@ -23,33 +23,40 @@ This repository also includes a pytorch implementation that has been tweaked to 
 
 ## Example outputs
 
-Here the black dots are input data, the dotted line is the true data. The blue line is the prediction, and the blue shadow is the uncertainty.
+Here the black dots are input data, the dotted line is the true data. The blue line is the prediction, and the blue shadow is the uncertainty to one standard deviation.
+
+I chose an test set example the deviates from the previous pattern. Given 3 days inputs, it must predict the next day which presents a differen't pattern. The trained model manages to predict it based on the inputs.
 
 ![](docs/1.png)
 
 ![](docs/4.png)
 
-![](docs/5.png)
+![](docs/7.png)
 
-![](docs/6.png)
+![](docs/12.png)
+
+![](docs/19.png)
 
 
 ## Code
 
 This is based on the code listed in the next section, with some changes. The most notable ones add stability, others are to make sure it can handle predicting into the future:
 
-Changes for stability:
-- in eval mode, take mean of latent space, and mean of output isntead of sampling
-- use log_variance where possible (there is a flag to try without this)
-  - and add a minimum bound to std (in log domain) to avoid mode collapse
-- use pytorch attention (which has dropout) instead of custom attention
-- use batchnorm and dropout on channel dimensions
-- use log_prob loss (no mseloss or BCELoss)
-- check and skip nonfinite values because for extreme inputs we can still get nan's
-
 Changes for a predictive use case:
 - target points are always in the future, context is in the past
 - context and and targets are still sampled randomly during training
+
+
+Changes for stability:
+- in eval mode, take mean of latent space, and mean of output isntead of sampling
+- use log_variance where possible (there is a flag to try without this, and it seems to help)
+  - and add a minimum bound to std (in log domain) to avoid mode collapse (one path using log_var one not)
+- use log_prob loss (not mseloss or BCELoss)
+- use pytorch attention (which has dropout) instead of custom attention
+- use_deterministic option
+- use batchnorm and dropout on channel dimensions
+- check and skip nonfinite values because for extreme inputs we can still get nan's
+
 
 
 ## See also:
