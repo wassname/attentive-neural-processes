@@ -19,7 +19,7 @@ This repository also includes a pytorch implementation that has been tweaked to 
   - Time features: time of day, day of week, month of year, etc
   - Bank holidays
   - Position in sequence: days since start of window
-- Target is: mean power usage on block
+- Target is: mean power usage on block 0
 
 ## Example outputs
 

@@ -253,7 +253,7 @@ class Decoder(nn.Module):
         x = self._target_transform(target_x)
 
         # concatenate target_x and representation
-        if r is not None:
+        if self.use_deterministic_path:
             z = torch.cat([r, z], dim=-1)
         representation = torch.cat([z, x], dim=-1)
 
