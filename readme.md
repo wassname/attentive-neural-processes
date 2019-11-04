@@ -25,7 +25,7 @@ This repository also includes a pytorch implementation that has been tweaked to 
 
 Here the black dots are input data, the dotted line is the true data. The blue line is the prediction, and the blue shadow is the uncertainty to one standard deviation.
 
-I chose an test set example the deviates from the previous pattern. Given 3 days inputs, it must predict the next day which presents a differen't pattern. The trained model manages to predict it based on the inputs.
+I chose a a difficult example below, it's a window in the test set that deviates from the previous pattern. Given 3 days inputs, it must predict the next day, and the next day has higher power usage than previously. The trained model manages to predict it based on the inputs.
 
 ![](docs/1.png)
 
@@ -38,7 +38,7 @@ I chose an test set example the deviates from the previous pattern. Given 3 days
 ![](docs/19.png)
 
 
-Compare this to a quick LSTM baseline, which didn't predict this divergance from the pattern. (Bear in mind that I didn't tweak this model as much). The uncertainty and prediction are also less smooth.
+Compare this to a quick LSTM baseline below, which didn't predict this divergance from the pattern. (Bear in mind that I didn't tweak this model as much). The uncertainty and prediction are also less smooth and the log probability is lower.
 
 ![](docs/lstm_with_context.png)
 
