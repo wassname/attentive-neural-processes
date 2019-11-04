@@ -38,6 +38,10 @@ I chose an test set example the deviates from the previous pattern. Given 3 days
 ![](docs/19.png)
 
 
+Compare this to a quick LSTM baseline, which didn't predict this divergance from the pattern. (Bear in mind that I didn't tweak this model as much). The uncertainty and prediction are also less smooth.
+
+![](docs/lstm_with_context.png)
+
 ## Code
 
 This is based on the code listed in the next section, with some changes. The most notable ones add stability, others are to make sure it can handle predicting into the future:
