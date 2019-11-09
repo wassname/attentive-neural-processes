@@ -41,7 +41,11 @@ I chose a a difficult example below, it's a window in the test set that deviates
 
 Compare this to a quick LSTM baseline below, which didn't predict this divergance from the pattern. (Bear in mind that I didn't tweak this model as much). The uncertainty and prediction are also less smooth and the log probability is lower.
 
+An LSTM with an encoder style similar to ANP's:
+
 ![](docs/lstm_with_context.png)
+
+and a normal LSTM:
 
 ![](docs/lstm_baseline.png)
 
