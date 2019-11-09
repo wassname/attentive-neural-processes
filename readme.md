@@ -37,10 +37,13 @@ I chose a a difficult example below, it's a window in the test set that deviates
 
 ![](docs/19.png)
 
+### Baseline
 
 Compare this to a quick LSTM baseline below, which didn't predict this divergance from the pattern. (Bear in mind that I didn't tweak this model as much). The uncertainty and prediction are also less smooth and the log probability is lower.
 
 ![](docs/lstm_with_context.png)
+
+![](docs/lstm_baseline.png)
 
 ## Code
 
