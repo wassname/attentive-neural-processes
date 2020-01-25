@@ -3,3 +3,4 @@ tqdm
 pandas
 numpy
 torchsummaryX
+pytorch_lightning

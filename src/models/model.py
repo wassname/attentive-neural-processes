@@ -52,7 +52,8 @@ class LatentModel(nn.Module):
         attention_dropout=0,
         min_std=0.1,
         use_lvar=False,
-        use_deterministic_path=True
+        use_deterministic_path=True,
+        **kwargs
     ):
 
         super().__init__()
