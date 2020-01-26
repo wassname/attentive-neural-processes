@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
 import math
 
-from .modules import LatentEncoder, DeterministicEncoder, Decoder
+from src.models.modules import LatentEncoder, DeterministicEncoder, Decoder
 
 
 def log_prob_sigma(value, loc, log_scale):

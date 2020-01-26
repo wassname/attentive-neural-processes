@@ -1,4 +1,4 @@
-
+from pathlib import Path
 import pandas as pd
 import numpy as np
 import torch
@@ -72,3 +72,77 @@ class SmartMeterDataSet(torch.utils.data.Dataset):
         
     def __len__(self):
         return len(self.df) - (self.num_context + self.num_extra_target)
+
+def get_smartmeter_df(indir=Path('./data/smart-meters-in-london'), use_logy=False):
+    csv_files = sorted(Path('data/smart-meters-in-london/halfhourly_dataset').glob('*.csv'))[:1]
+    df = pd.concat([pd.read_csv(f, parse_dates=[1], na_values=['Null']) for f in csv_files])
+#     print(df.info())
+
+    df = df.groupby('tstp').mean()
+    df['tstp'] = df.index
+    df.index.name = ''
+
+    # Load weather data
+    df_weather = pd.read_csv(indir/'weather_hourly_darksky.csv', parse_dates=[3])
+
+    use_cols = ['visibility', 'windBearing', 'temperature', 'time', 'dewPoint',
+           'pressure', 'apparentTemperature', 'windSpeed', 
+           'humidity']
+    df_weather = df_weather[use_cols].set_index('time')
+
+    # Resample to match energy data    
+    df_weather = df_weather.resample('30T').ffill()
+
+    # Normalise
+    weather_norms=dict(mean={'visibility': 11.2,
+     'windBearing': 195.7,
+     'temperature': 10.5,
+     'dewPoint': 6.5,
+     'pressure': 1014.1,
+     'apparentTemperature': 9.2,
+     'windSpeed': 3.9,
+     'humidity': 0.8},
+    std={'visibility': 3.1,
+     'windBearing': 90.6,
+     'temperature': 5.8,
+     'dewPoint': 5.0,
+     'pressure': 11.4,
+     'apparentTemperature': 6.9,
+     'windSpeed': 2.0,
+     'humidity': 0.1})
+
+    for col in df_weather.columns:
+        df_weather[col] -= weather_norms['mean'][col]
+        df_weather[col] /= weather_norms['std'][col]
+
+    df = pd.concat([df, df_weather], 1).dropna()
+    
+    
+    # Also find bank holidays
+    df_hols = pd.read_csv(indir/'uk_bank_holidays.csv', parse_dates=[0])
+    holidays = set(df_hols['Bank holidays'].dt.round('D'))
+
+    df['holiday'] = df.tstp.apply(lambda dt:dt.floor('D') in holidays).astype(int)
+
+    # Add time features
+    time = df.tstp
+    df["month"] = time.dt.month / 12.0
+    df['day'] = time.dt.day / 310.0
+    df['week'] = time.dt.week / 52.0
+    df['hour'] = time.dt.hour / 24.0
+    df['minute'] = time.dt.minute / 24.0
+    df['dayofweek'] = time.dt.dayofweek / 7.0
+
+    # Drop nan and 0's
+    df = df[df['energy(kWh/hh)']!=0]
+    df = df.dropna()
+
+    if use_logy:
+        df['energy(kWh/hh)'] = np.log(df['energy(kWh/hh)']+eps)
+    df = df.sort_values('tstp')
+    
+    # split data
+    n_split = -int(len(df)*0.1)
+    df_train = df[:n_split]
+    df_test = df[n_split:]
+    return df_train, df_test
