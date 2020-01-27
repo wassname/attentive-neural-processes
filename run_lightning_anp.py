@@ -20,16 +20,11 @@ def add_default_args(parser):
                                help='evaluate model on validation set', default=False)
     return parser
 
-if __name__ == "__main__":
-    parser = HyperOptArgumentParser(add_help=False)
-
-    parser = add_default_args(parser)
-
-    # give the module a chance to add own params
-    parser = LatentModelPL.add_model_specific_args(parser)
-
+def parse_args(parser, argv=None):
     # parse params
-    hyperparams = parser.parse_args()
+    # Set our params here, in a way compatible with cli
+    argv = argv.replace('\n','').strip().split(' ')
+    hyperparams = parser.parse_args(argv)
 
     import copy
     hparams = copy.deepcopy(hyperparams)
@@ -39,7 +34,19 @@ if __name__ == "__main__":
         v = getattr(hparams, k)
         if not isinstance(v, (int, float, str, bool, torch.Tensor)):
             delattr(hparams, k)
-            
+
+
+    return hyperparams, hparams
+
+if __name__ == "__main__":
+    parser = HyperOptArgumentParser(add_help=False)
+
+    parser = add_default_args(parser)
+
+    # give the module a chance to add own params
+    parser = LatentModelPL.add_model_specific_args(parser)
+
+    hyperparams, hparams = parse_args(parser)
     print(hparams)
 
     model = LatentModelPL(hparams)

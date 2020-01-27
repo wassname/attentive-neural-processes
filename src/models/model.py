@@ -53,6 +53,7 @@ class LatentModel(nn.Module):
         min_std=0.1,
         use_lvar=False,
         use_deterministic_path=True,
+        attention_layers=2,
         **kwargs
     ):
 
@@ -71,6 +72,7 @@ class LatentModel(nn.Module):
             n_heads=num_heads,
             min_std=min_std,
             use_lvar=use_lvar,
+            attention_layers=attention_layers,
         )
 
         self._deterministic_encoder = DeterministicEncoder(
@@ -83,6 +85,7 @@ class LatentModel(nn.Module):
             dropout=dropout,
             attention_dropout=attention_dropout,
             n_heads=num_heads,
+            attention_layers=attention_layers,
         )
 
         self._decoder = Decoder(
@@ -141,6 +144,7 @@ class LatentModel(nn.Module):
             log_p = None
             kl_loss = None
             loss = None
+            mse_loss = None
 
         y_pred = dist.rsample() if self.training else dist.loc
         return y_pred, kl_loss, loss, dist.scale

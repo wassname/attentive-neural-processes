@@ -1,5 +1,6 @@
 import pytorch_lightning as pl
 import torch
+import torch.nn.functional as F
 from argparse import ArgumentParser
 from test_tube import Experiment, HyperOptArgumentParser
 from src.models.model import LatentModel
@@ -23,9 +24,10 @@ class LatentModelPL(pl.LightningModule):
         context_x, context_y, target_x, target_y = batch
         y_pred, kl, loss, y_std = self.forward(context_x, context_y, target_x, target_y)
         tensorboard_logs = {
-            "train_loss": loss,
-            "train_kl": kl.mean(),
+            "train/loss": loss,
+            "train/kl": kl.mean(),
             "train/std": y_std.mean(),
+            "train/mse": F.mse_loss(y_pred, target_y).mean(),
         }
         return {"loss": loss, "log": tensorboard_logs}
 
@@ -33,10 +35,12 @@ class LatentModelPL(pl.LightningModule):
         assert all(torch.isfinite(d).all() for d in batch)
         context_x, context_y, target_x, target_y = batch
         y_pred, kl, loss, y_std = self.forward(context_x, context_y, target_x, target_y)
+        
         tensorboard_logs = {
-            "val/loss": loss,
+            "val_loss": loss,
             "val/kl": kl.mean(),
-            "val/std": y_std.mean()
+            "val/std": y_std.mean(),
+            "val/mse": F.mse_loss(y_pred, target_y).mean(),
         }
         return {"val_loss": loss, "log": tensorboard_logs}
 
@@ -47,14 +51,23 @@ class LatentModelPL(pl.LightningModule):
             image = plot_from_loader_to_tensor(loader, self.model, i=self.hparams.vis_i)
             self.logger.experiment.add_image('val/image', image, self.trainer.global_step)
         
+        keys = outputs[0]["log"].keys()
+        # tensorboard_logs = {}
+        # for k in keys:
+        #     tensorboard_logs[k] = torch.stack([x["log"][k] for x in outputs if k in x["log"]]).mean()
+        tensorboard_logs = {k: torch.stack([x["log"][k] for x in outputs if k in x["log"]]).mean() for k in keys}
+
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
-        tensorboard_logs = {"val_loss": avg_loss}
-        print(self.trainer.global_step, tensorboard_logs)
+        print(f"step {self.trainer.global_step}, {tensorboard_logs}")
+
+        # Log hparams with metric, doesn't work
+        # self.logger.experiment.add_hparams(self.hparams.__dict__, {"avg_val_loss": avg_loss})
+
         return {"avg_val_loss": avg_loss, "log": tensorboard_logs}
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, patience=2, verbose=True, min_lr=1e-5) # note early stopping has patient 3
         return [optim], [scheduler]
 
     def _get_cache_dfs(self):
@@ -123,22 +136,23 @@ class LatentModelPL(pl.LightningModule):
         parser.add_argument("--y_dim", default=1, type=int)
         parser.add_argument("--vis_i", default=670, type=int)
 
-        parser.opt_list("--hidden_dim", default=128, type=int, tunable=True, options=[8*2**i for i in range(7)])
-        parser.opt_list("--latent_dim", default=256, type=int, tunable=True, options=[8*2**i for i in range(7)])
+        parser.opt_list("--hidden_dim", default=128, type=int, tunable=True, options=[8*2**i for i in range(8)])
+        parser.opt_list("--latent_dim", default=128, type=int, tunable=True, options=[8*2**i for i in range(8)])
         parser.add_argument("--num_heads", default=8, type=int)
-        parser.opt_list("--n_latent_encoder_layers", default=4, type=int, tunable=True, options=[1, 2, 4, 8])
-        parser.opt_list("--n_det_encoder_layers", default=4, type=int, tunable=True, options=[1, 2, 4, 8])
-        parser.opt_list("--n_decoder_layers", default=2, type=int, tunable=True, options=[1, 2, 4, 8])
+        parser.add_argument("--attention_layers", default=1, type=int)
+        parser.opt_list("--n_latent_encoder_layers", default=4, type=int, tunable=True, options=[1, 2, 4, 8, 16])
+        parser.opt_list("--n_det_encoder_layers", default=4, type=int, tunable=True, options=[1, 2, 4, 8, 16])
+        parser.opt_list("--n_decoder_layers", default=2, type=int, tunable=True, options=[1, 2, 4, 8, 16])
 
-        parser.opt_range("--dropout", default=0, type=float, tunable=True, low=0, high=0.5)
-        parser.opt_range("--attention_dropout", default=0, type=float, tunable=True, low=0, high=0.5)
-        parser.add_argument("--min_std", default=0.01, type=float)
+        parser.opt_range("--dropout", default=0, type=float, tunable=True, low=0, high=0.75)
+        parser.opt_range("--attention_dropout", default=0, type=float, tunable=True, low=0, high=0.75)
+        parser.add_argument("--min_std", default=0.005, type=float)
 
         parser.opt_list(
-            "--latent_enc_self_attn_type", default="multihead", type=str, tunable=True, options=['uniform', 'dot', 'multihead', 'laplace']
+            "--latent_enc_self_attn_type", default="multihead", type=str, tunable=True, options=['uniform', 'dot', 'multihead', 'ptmultihead']
         )
-        parser.opt_list("--det_enc_self_attn_type", default="multihead", type=str, tunable=True, options=['uniform', 'dot', 'multihead', 'laplace'])
-        parser.opt_list("--det_enc_cross_attn_type", default="multihead", type=str, tunable=True, options=['uniform', 'dot', 'multihead', 'laplace'])
+        parser.opt_list("--det_enc_self_attn_type", default="multihead", type=str, tunable=True, options=['uniform', 'dot', 'multihead', 'ptmultihead'])
+        parser.opt_list("--det_enc_cross_attn_type", default="multihead", type=str, tunable=True, options=['uniform', 'dot', 'multihead', 'ptmultihead'])
 
         parser.opt_list("--use_lvar", default=False, type=bool, tunable=True, options=[False, True])
         parser.opt_list("--use_deterministic_path", default=True, tunable=True, type=bool, options=[False, True])

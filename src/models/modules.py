@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import math
+from .attention import Attention as PtAttention
 
 class NPBlockRelu2d(nn.Module):
     """Block for Neural Processes."""
@@ -39,7 +40,7 @@ def block_relu(in_dim, out_dim, dropout=0, inplace=False):
 
 
 class Attention(nn.Module):
-    def __init__(self, hidden_dim, attention_type, n_heads=8, dropout=0):
+    def __init__(self, hidden_dim, attention_type, attention_layers=1, n_heads=8, dropout=0):
         super().__init__()
         if attention_type == "uniform":
             self._attention_func = self._uniform_attention
@@ -48,11 +49,17 @@ class Attention(nn.Module):
         elif attention_type == "dot":
             self._attention_func = self._dot_attention
         elif attention_type == "multihead":
-            self._mattn = torch.nn.MultiheadAttention(
+            self._mattn = nn.ModuleList([torch.nn.MultiheadAttention(
                 hidden_dim, n_heads, bias=False, dropout=dropout
-            )
+            ) for _ in range(attention_layers)])
             self._attention_func = self._pytorch_multihead_attention
             self.n_heads = n_heads
+        elif attention_type == "ptmultihead":
+            self._mattn = nn.ModuleList([PtAttention(
+                hidden_dim, n_heads
+            ) for _ in range(attention_layers)])
+            self._attention_func = self._ptmultihead_fn
+            self.n_heads = n_heads      
         else:
             raise NotImplementedError
 
@@ -85,8 +92,20 @@ class Attention(nn.Module):
 
     def _pytorch_multihead_attention(self, k, v, q):
         # Pytorch multiheaded attention takes inputs if diff order and permutation
-        o = self._mattn(q.permute(1, 0, 2), k.permute(1, 0, 2), v.permute(1, 0, 2))[0]
+        q = q.permute(1, 0, 2)
+        k = k.permute(1, 0, 2)
+        v = v.permute(1, 0, 2)
+        for attention in self._mattn:
+            o = attention(q, k, v)[0]
+            q, k, v = o, o, o
         return o.permute(1, 0, 2)
+
+    def _ptmultihead_fn(self, k, v, q):
+        for attention in self._mattn:
+            o = attention(k, v, q)[0]
+            # print(k.shape, v.shape, q.shape, o.shape)
+            q, k, v = o, o, o
+        return o
 
 
 class LatentEncoder(nn.Module):
@@ -105,6 +124,7 @@ class LatentEncoder(nn.Module):
         dropout=0,
         attention_dropout=0,
         use_lvar=False,
+        attention_layers=2,
     ):
         super().__init__()
         self.use_lvar = use_lvar
@@ -116,7 +136,7 @@ class LatentEncoder(nn.Module):
             ]
         )
         self._self_attention = Attention(
-            hidden_dim, self_attention_type, n_heads=n_heads, dropout=attention_dropout
+            hidden_dim, self_attention_type, n_heads=n_heads, dropout=attention_dropout, attention_layers=attention_layers
         )
         self._penultimate_layer = block_relu(hidden_dim, hidden_dim, dropout)
         self._mean = nn.Linear(hidden_dim, latent_dim)
@@ -180,6 +200,7 @@ class DeterministicEncoder(nn.Module):
         dropout=0,
         attention_dropout=0,
         n_heads=8,
+        attention_layers=2,
     ):
         super().__init__()
         self._input_layer = NPBlockRelu2d(input_dim, hidden_dim, dropout)
@@ -190,10 +211,10 @@ class DeterministicEncoder(nn.Module):
             ]
         )
         self._self_attention = Attention(
-            hidden_dim, self_attention_type, dropout=attention_dropout, n_heads=n_heads
+            hidden_dim, self_attention_type, dropout=attention_dropout, n_heads=n_heads, attention_layers=attention_layers
         )
         self._cross_attention = Attention(
-            hidden_dim, cross_attention_type, dropout=attention_dropout, n_heads=n_heads
+            hidden_dim, cross_attention_type, dropout=attention_dropout, n_heads=n_heads, attention_layers=attention_layers
         )
         self._target_transform = nn.Linear(x_dim, hidden_dim)
         self._context_transform = nn.Linear(x_dim, hidden_dim)
