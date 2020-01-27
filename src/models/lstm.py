@@ -102,6 +102,10 @@ class LSTM_PL(pl.LightningModule):
         return {'val_loss': loss, 'log': tensorboard_logs}
 
     def validation_end(self, outputs):
+        # TODO send an image to tensroboard, like in the lighting_anp.py file
+        # if self.hparams["vis_i"] > 0:
+        #     self.logger.experiment.add_image('val/image', image, 
+
         # OPTIONAL
         avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
         keys = outputs[0]["log"].keys()
