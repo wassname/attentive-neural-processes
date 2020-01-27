@@ -9,6 +9,7 @@ from src.plot import plot_from_loader_to_tensor
 from src.utils import ObjectDict
 
 
+
 class LatentModelPL(pl.LightningModule):
     def __init__(self, hparams):
         super().__init__()
