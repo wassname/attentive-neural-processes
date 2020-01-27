@@ -4,3 +4,4 @@ pandas
 numpy
 torchsummaryX
 pytorch_lightning
+optuna
