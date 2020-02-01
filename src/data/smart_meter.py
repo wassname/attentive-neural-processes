@@ -23,23 +23,32 @@ def collate_fns(max_num_context, max_num_extra_target, sample, sort=True):
         x = torch.from_numpy(x).float()
         y = torch.from_numpy(y).float()
 
+        x[:,:max_num_context, -1] = 0  # Feature to let the model know this is past data
+        n=x[:, max_num_context:, -1].shape[1]
+        x[:, max_num_context:, -1] = torch.arange(1, n+1)/1.0/n  # Feature to let the model know this is past data
         x_context = x[:, :max_num_context]
         y_context = y[:, :max_num_context]
-
+    
         if sample:
             x_target_extra = x[:, max_num_context:]
             y_target_extra = y[:, max_num_context:]
 
-            # This is slightly differen't than normal, we are ensuring that out target point are in the future, to mimic deployment
+            # This is slightly differen't than normal, we are ensuring that our target point are in the future, to mimic deployment
             x_context, y_context = npsample_batch(
                 x_context, y_context, size=num_context, sort=sort
             )
+
             x_target_extra, y_target_extra = npsample_batch(
                 x_target_extra, y_target_extra, size=num_extra_target, sort=sort
             )
 
             x = torch.cat([x_context, x_target_extra], 1)
-            y = torch.cat([y_context, y_target_extra], 1)
+            y = torch.cat([y_context, y_target_extra], 1)            
+
+        assert (x_context[:, :, -1]==0).all()
+        assert (x[:, -1, -1] > 0).all()
+        assert (x[:, 0, -1] == 0).all()
+        
         return x_context, y_context, x, y
 
     return collate_fn
@@ -60,6 +69,9 @@ class SmartMeterDataSet(torch.utils.data.Dataset):
         # make sure tstp, which is our x axis, is the first value
         columns = ['tstp'] + list(set(rows.columns) - set(['tstp']))
         rows = rows[columns]
+
+        # This will be the last row, and will change it upon sample to let the model know some points are in the future
+        rows['future']=1
 
         x = rows.drop(columns=self.label_names)
         y = rows[self.label_names]

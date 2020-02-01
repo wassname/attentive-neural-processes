@@ -2,6 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 import torch
+from tqdm.auto import tqdm
 from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
@@ -140,6 +141,13 @@ class LSTM_PL(pl.LightningModule):
         assert torch.isfinite(avg_loss)
         return {"avg_val_loss": avg_loss, "log": tensorboard_logs}
 
+
+    def test_step(self, *args, **kwargs):
+        return self.validation_step(*args, **kwargs)
+
+    def test_end(self, *args, **kwargs):
+        return self.validation_end(*args, **kwargs)
+
     def configure_optimizers(self):
         optim = torch.optim.Adam(self.parameters(), lr=self.hparams["learning_rate"])
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -219,13 +227,13 @@ class LSTM_PL(pl.LightningModule):
         return parser
 
 
-def plot_from_loader(loader, model, vis_i=670):
+def plot_from_loader(loader, model, vis_i=670, n=100):
     dset_test = loader.dataset
     label_names = dset_test.label_names
     y_trues = []
     y_preds = []
     vis_i = min(vis_i, len(dset_test))
-    for i in range(vis_i, vis_i + 100):
+    for i in tqdm(range(vis_i, vis_i + n)):
         x_rows, y_rows = dset_test.iloc(i)
         x, y = dset_test[i]
         device = next(model.parameters()).device
