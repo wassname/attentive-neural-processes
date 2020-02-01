@@ -71,6 +71,18 @@ Changes for stability:
 - use batchnorm and dropout on channel dimensions
 - check and skip nonfinite values because for extreme inputs we can still get nan's
 
+## Replicating tensorflow behaviour
+
+I put some work into replicating the behaviour shown in the [original deepmind tensorflow notebook](https://github.com/deepmind/neural-processes/blob/master/attentive_neural_process.ipynb).
+
+Compare deepmind:
+- ![](docs/deepmind1.png)
+
+And this repo (anp_1d_regression.ipynb)
+- ![](docs/replicate2.png)
+
+It's just a qualitative comparison but we see the same kind of overfitting with uncertainty being tight where lots of data points exist, and wide where they do not. However this repo seems to miss points occasionally.
+
 
 
 ## See also:
