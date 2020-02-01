@@ -108,6 +108,7 @@ def plot_from_loader_to_tensor(
     # Send fig to tensorboard
     buf = io.BytesIO()
     plt.savefig(buf, format='jpeg')
+    plt.close()
     buf.seek(0)
     image = PIL.Image.open(buf)
     image = ToTensor()(image)#.unsqueeze(0)

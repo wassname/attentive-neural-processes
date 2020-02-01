@@ -63,6 +63,7 @@ class LatentModelPL(pl.LightningModule):
         tensorboard_logs = {k: torch.stack([x["log"][k] for x in outputs if k in x["log"]]).mean() for k in keys}
 
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
+        assert torch.isfinite(avg_loss)
         tensorboard_logs_str = {k: f'{v}' for k, v in tensorboard_logs.items()}
         print(f"step {self.trainer.global_step}, {tensorboard_logs_str}")
 

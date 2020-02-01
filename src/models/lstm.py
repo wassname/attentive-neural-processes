@@ -6,6 +6,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torchvision.datasets import MNIST
+from test_tube import Experiment, HyperOptArgumentParser
 import torchvision.transforms as transforms
 from argparse import ArgumentParser
 import json
@@ -90,6 +91,8 @@ class LSTMNet(nn.Module):
 
 class LSTM_PL(pl.LightningModule):
     def __init__(self, hparams):
+        # TODO make label name configurable
+        # TODO make data source configurable
         super().__init__()
         self.hparams = ObjectDict()
         self.hparams.update(
@@ -134,6 +137,7 @@ class LSTM_PL(pl.LightningModule):
         }
         tensorboard_logs_str = {k: f"{v}" for k, v in tensorboard_logs.items()}
         print(f"step {self.trainer.global_step}, {tensorboard_logs_str}")
+        assert torch.isfinite(avg_loss)
         return {"avg_val_loss": avg_loss, "log": tensorboard_logs}
 
     def configure_optimizers(self):
@@ -198,12 +202,12 @@ class LSTM_PL(pl.LightningModule):
         """
         # MODEL specific
         parser = HyperOptArgumentParser(parents=[parent_parser])
-        parser.add_argument("--learning_rate", default=0.02, type=float)
-        parser.add_argument("--batch_size", default=32, type=int)
-        parser.add_argument("--lstm_dropout", default=0, type=float)
-        parser.add_argument("--hidden_size", default=32, type=int)
+        parser.add_argument("--learning_rate", default=0.002, type=float)
+        parser.add_argument("--batch_size", default=16, type=int)
+        parser.add_argument("--lstm_dropout", default=0.5, type=float)
+        parser.add_argument("--hidden_size", default=16, type=int)
         parser.add_argument("--input_size", default=8, type=int)
-        parser.add_argument("--lstm_layers", default=4, type=int)
+        parser.add_argument("--lstm_layers", default=8, type=int)
         parser.add_argument("--bidirectional", default=False, type=bool)
 
         # training specific (for this model)
@@ -221,7 +225,7 @@ def plot_from_loader(loader, model, vis_i=670):
     y_trues = []
     y_preds = []
     vis_i = min(vis_i, len(dset_test))
-    for i in range(vis_i, vis_i + 50):
+    for i in range(vis_i, vis_i + 100):
         x_rows, y_rows = dset_test.iloc(i)
         x, y = dset_test[i]
         device = next(model.parameters()).device
@@ -240,10 +244,12 @@ def plot_from_loader(loader, model, vis_i=670):
 
     plt.figure()
     pd.concat(y_trues)[label_names[0]].plot(label="y_true")
+    ylims = plt.ylim()
     pd.concat(y_preds)[label_names[0]].plot(label="y_pred")
     plt.legend()
     t_ahead = pd.Timedelta("30T") * model.hparams.target_length
     plt.title(f"predicting {t_ahead} ahead")
+    plt.ylim(*ylims)
     # plt.show()
 
 
@@ -253,6 +259,7 @@ def plot_from_loader_to_tensor(*args, **kwargs):
     # Send fig to tensorboard
     buf = io.BytesIO()
     plt.savefig(buf, format="jpeg")
+    plt.close()
     buf.seek(0)
     image = PIL.Image.open(buf)
     image = ToTensor()(image)  # .unsqueeze(0)
