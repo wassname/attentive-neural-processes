@@ -4,7 +4,10 @@ This project uses [Attentive Neural Process](https://arxiv.org/abs/1901.05761) (
 
 ![](docs/anp.png)
 
-This repository also includes a pytorch implementation that has been tweaked to be more flexible and stable. It may be usefull if you are looking for a ANP model in pytorch, and seems more stable than others available now (as of 2019-11-01).
+I'm using them in a weird way since I'm predicting ahead instead of infilling, however they perform well.
+
+I've always made lots of weaks for flexibility and stability and [replicated the deepmind results](anp_1d_regression.ipynb) in pytorch. This seems better than the other pytorch versions of ANP (as of 2019-11-01).
+
 
 ## Usage
 
@@ -37,7 +40,7 @@ I chose a a difficult example below, it's a window in the test set that deviates
 
 ![](docs/19.png)
 
-### Baseline
+### LSTM Baseline
 
 Compare this to a quick LSTM baseline below, which didn't predict this divergance from the pattern. (Bear in mind that I didn't tweak this model as much). The uncertainty and prediction are also less smooth and the log probability is lower.
 
@@ -72,10 +75,11 @@ Changes for stability:
 
 ## See also:
 
-A list of projects I used as reference, is modified to make this one:
+A list of projects I used as reference or modified to make this one:
 
 - Original code in tensorflow from hyunjik11 (author of the original paper) : https://github.com/deepmind/neural-processes/blob/master/attentive_neural_process.ipynb
 - First pytorch implementation by soobinseo: https://github.com/soobinseo/Attentive-Neural-Process/blob/master/network.py
 - Second pytorch implementation KurochkinAlexey (has some bugs currently) https://github.com/KurochkinAlexey/Attentive-neural-processes/blob/master/anp_1d_regression.ipynb
 - If you want to try vanilla neural processes: https://github.com/EmilienDupont/neural-processes/blob/master/example-1d.ipynb
 
+I'm very gratefull for all these authors for sharing their work. It was a pleasure to dive deep into these models compare the differen't implementations.

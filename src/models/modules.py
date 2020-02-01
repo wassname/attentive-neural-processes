@@ -24,7 +24,7 @@ class NPBlockRelu2d(nn.Module):
         x = self.act(self.linear(x))
 
         # Now we want to apply batchnorm and dropout to the channels. So we put it in shape
-        # (Batch, Channels, Sequence, None) so we can use Dropout2d
+        # (Batch, Channels, Sequence, None) so we can use Dropout2d & BatchNorm2d
         x = x.permute(0, 2, 1)[:, :, :, None]
 
         if self.norm:
@@ -256,10 +256,11 @@ class LatentEncoder(nn.Module):
         mean = self._mean(mean_repr)
         log_var = self._log_var(mean_repr)
 
-        # Clip it in the log domain, so it can only approach self.min_std, this helps avoid mode collapase
-        # 2 ways, a better but untested way using the more stable log domain, and the way from the deepmind repo
         if self._use_lvar:
-            log_var = torch.clamp(F.logsigmoid(log_var), np.log(self._min_std))
+            # Clip it in the log domain, so it can only approach self.min_std, this helps avoid mode collapase
+            # 2 ways, a better but untested way using the more stable log domain, and the way from the deepmind repo
+            log_var = F.logsigmoid(log_var)
+            log_var = torch.clamp(log_var, np.log(self._min_std), -np.log(self._min_std))
             sigma = torch.exp(0.5 * log_var)
         else:
             sigma = self._min_std + (1 - self._min_std) * torch.sigmoid(log_var * 0.5)
@@ -382,7 +383,7 @@ class Decoder(nn.Module):
 
         # Bound or clamp the variance
         if self._use_lvar:
-            log_sigma = torch.clamp(log_sigma, math.log(self._min_std))
+            log_sigma = torch.clamp(log_sigma, math.log(self._min_std), -math.log(1e-5))
             sigma = torch.exp(log_sigma)
         else:
             sigma = self._min_std + (1 - self._min_std) * F.softplus(log_sigma)

@@ -75,6 +75,12 @@ class LatentModelPL(pl.LightningModule):
 
         return {"avg_val_loss": avg_loss, "log": tensorboard_logs}
 
+    def test_step(self, *args, **kwargs):
+        return self.validation_step(*args, **kwargs)
+
+    def test_end(self, *args, **kwargs):
+        return self.validation_end(*args, **kwargs)
+
     def configure_optimizers(self):
         optim = torch.optim.Adam(self.parameters(), lr=self.hparams["learning_rate"])
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, patience=2, verbose=True, min_lr=1e-5) # note early stopping has patient 3
