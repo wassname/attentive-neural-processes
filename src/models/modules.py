@@ -2,17 +2,21 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import math
-from .attention import Attention as PtAttention
+import numpy as np
+# from .attention import Attention as PtAttention
+
 
 class NPBlockRelu2d(nn.Module):
     """Block for Neural Processes."""
 
-    def __init__(self, in_channels, out_channels, dropout=0, norm=True):
+    def __init__(
+        self, in_channels, out_channels, dropout=0, batchnorm=False, bias=False
+    ):
         super().__init__()
-        self.linear = nn.Linear(in_channels, out_channels)
+        self.linear = nn.Linear(in_channels, out_channels, bias=bias)
         self.act = nn.ReLU()
         self.dropout = nn.Dropout2d(dropout)
-        self.norm = nn.BatchNorm2d(out_channels) if norm else False
+        self.norm = nn.BatchNorm2d(out_channels) if batchnorm else False
 
     def forward(self, x):
         # x.shape is (Batch, Sequence, Channels)
@@ -30,18 +34,86 @@ class NPBlockRelu2d(nn.Module):
         return x[:, :, :, 0].permute(0, 2, 1)
 
 
-def block_relu(in_dim, out_dim, dropout=0, inplace=False):
-    return nn.Sequential(
-        nn.Linear(in_dim, out_dim),
-        nn.ReLU(inplace=inplace),
-        nn.BatchNorm1d(out_dim),
-        nn.Dropout(dropout, inplace=inplace),
-    )
+class BatchMLP(nn.Module):
+    """Apply MLP to the final axis of a 3D tensor (reusing already defined MLPs).
+
+    Args:
+        input: input tensor of shape [B,n,d_in].
+        output_sizes: An iterable containing the output sizes of the MLP as defined 
+            in `basic.Linear`.
+    Returns:
+        tensor of shape [B,n,d_out] where d_out=output_size
+    """
+
+    def __init__(
+        self, input_size, output_size, num_layers=2, dropout=0, batchnorm=False
+    ):
+        super().__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+        self.num_layers = num_layers
+
+        self.initial = NPBlockRelu2d(
+            input_size, output_size, dropout=dropout, batchnorm=batchnorm
+        )
+        self.encoder = nn.Sequential(
+            *[
+                NPBlockRelu2d(
+                    output_size, output_size, dropout=dropout, batchnorm=batchnorm
+                )
+                for _ in range(num_layers - 2)
+            ]
+        )
+        self.final = nn.Linear(output_size, output_size)
+
+    def forward(self, x):
+        x = self.initial(x)
+        x = self.encoder(x)
+        return self.final(x)
+
+
+class AttnLinear(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.linear = nn.Linear(in_channels, out_channels, bias=False)
+        torch.nn.init.normal_(self.linear.weight, std=in_channels ** -0.5)
+
+    def forward(self, x):
+        x = self.linear(x)
+        return x
 
 
 class Attention(nn.Module):
-    def __init__(self, hidden_dim, attention_type, attention_layers=1, n_heads=8, dropout=0):
+    def __init__(
+        self,
+        hidden_dim,
+        attention_type,
+        attention_layers=2,
+        n_heads=8,
+        x_dim=1,
+        rep="mlp",
+        dropout=0,
+        batchnorm=False,
+    ):
         super().__init__()
+        self._rep = rep
+
+        if self._rep == "mlp":
+            self.batch_mlp_k = BatchMLP(
+                x_dim,
+                hidden_dim,
+                attention_layers,
+                dropout=dropout,
+                batchnorm=batchnorm,
+            )
+            self.batch_mlp_q = BatchMLP(
+                x_dim,
+                hidden_dim,
+                attention_layers,
+                dropout=dropout,
+                batchnorm=batchnorm,
+            )
+
         if attention_type == "uniform":
             self._attention_func = self._uniform_attention
         elif attention_type == "laplace":
@@ -49,21 +121,30 @@ class Attention(nn.Module):
         elif attention_type == "dot":
             self._attention_func = self._dot_attention
         elif attention_type == "multihead":
-            self._mattn = nn.ModuleList([torch.nn.MultiheadAttention(
-                hidden_dim, n_heads, bias=False, dropout=dropout
-            ) for _ in range(attention_layers)])
-            self._attention_func = self._pytorch_multihead_attention
+            self._W_k = nn.ModuleList(
+                [AttnLinear(hidden_dim, hidden_dim) for _ in range(n_heads)]
+            )
+            self._W_v = nn.ModuleList(
+                [AttnLinear(hidden_dim, hidden_dim) for _ in range(n_heads)]
+            )
+            self._W_q = nn.ModuleList(
+                [AttnLinear(hidden_dim, hidden_dim) for _ in range(n_heads)]
+            )
+            self._W = AttnLinear(n_heads * hidden_dim, hidden_dim)
+            self._attention_func = self._multihead_attention
             self.n_heads = n_heads
         elif attention_type == "ptmultihead":
-            self._mattn = nn.ModuleList([PtAttention(
-                hidden_dim, n_heads
-            ) for _ in range(attention_layers)])
-            self._attention_func = self._ptmultihead_fn
-            self.n_heads = n_heads      
+            self._W = torch.nn.MultiheadAttention(
+                hidden_dim, n_heads, bias=False, dropout=dropout
+            )
+            self._attention_func = self._pytorch_multihead_attention
         else:
             raise NotImplementedError
 
     def forward(self, k, v, q):
+        if self._rep == "mlp":
+            k = self.batch_mlp_k(k)
+            q = self.batch_mlp_q(q)
         rep = self._attention_func(k, v, q)
         return rep
 
@@ -90,153 +171,162 @@ class Attention(nn.Module):
         rep = torch.einsum("bik,bkj->bij", weights, v)
         return rep
 
+    def _multihead_attention(self, k, v, q):
+        outs = []
+        for i in range(self.n_heads):
+            k_ = self._W_k[i](k)
+            v_ = self._W_v[i](v)
+            q_ = self._W_q[i](q)
+            out = self._dot_attention(k_, v_, q_)
+            outs.append(out)
+        outs = torch.stack(outs, dim=-1)
+        outs = outs.view(outs.shape[0], outs.shape[1], -1)
+        rep = self._W(outs)
+        return rep
+
     def _pytorch_multihead_attention(self, k, v, q):
         # Pytorch multiheaded attention takes inputs if diff order and permutation
         q = q.permute(1, 0, 2)
         k = k.permute(1, 0, 2)
         v = v.permute(1, 0, 2)
-        for attention in self._mattn:
-            o = attention(q, k, v)[0]
-            q, k, v = o, o, o
+        o = self._W(q, k, v)[0]
         return o.permute(1, 0, 2)
-
-    def _ptmultihead_fn(self, k, v, q):
-        for attention in self._mattn:
-            o = attention(k, v, q)[0]
-            # print(k.shape, v.shape, q.shape, o.shape)
-            q, k, v = o, o, o
-        return o
 
 
 class LatentEncoder(nn.Module):
-    """
-    Latent Encoder [For prior, posterior]
-    """
     def __init__(
         self,
         input_dim,
         hidden_dim=32,
         latent_dim=32,
-        n_heads=8,
-        self_attention_type="multihead",
+        self_attention_type="dot",
         n_encoder_layers=3,
-        min_std=0.1,
+        min_std=0.01,
+        batchnorm=False,
         dropout=0,
         attention_dropout=0,
         use_lvar=False,
+        use_self_attn=False,
         attention_layers=2,
     ):
         super().__init__()
-        self.use_lvar = use_lvar
-        self._input_layer = NPBlockRelu2d(input_dim, hidden_dim, dropout)
-        self._encoder = nn.Sequential(
-            *[
-                NPBlockRelu2d(hidden_dim, hidden_dim, dropout)
+        self._input_layer = nn.Linear(input_dim, hidden_dim)
+        self._encoder = nn.ModuleList(
+            [
+                NPBlockRelu2d(
+                    hidden_dim, hidden_dim, batchnorm=batchnorm, dropout=dropout
+                )
                 for _ in range(n_encoder_layers)
             ]
         )
-        self._self_attention = Attention(
-            hidden_dim, self_attention_type, n_heads=n_heads, dropout=attention_dropout, attention_layers=attention_layers
-        )
-        self._penultimate_layer = block_relu(hidden_dim, hidden_dim, dropout)
+        if use_self_attn:
+            self._self_attention = Attention(
+                hidden_dim,
+                self_attention_type,
+                attention_layers,
+                rep="identity",
+                dropout=attention_dropout,
+            )
+        self._penultimate_layer = nn.Linear(hidden_dim, hidden_dim)
         self._mean = nn.Linear(hidden_dim, latent_dim)
         self._log_var = nn.Linear(hidden_dim, latent_dim)
-        self.min_std = min_std
+        self._min_std = min_std
+        self._use_lvar = use_lvar
+        self._use_self_attn = use_self_attn
 
     def forward(self, x, y):
-        """Encodes the inputs into one representation.
-
-        Args:
-        x: Tensor of shape [B,observations,d_x]. For this 1D regression
-            task this corresponds to the x-values.
-        y: Tensor of shape [B,observations,d_y]. For this 1D regression
-            task this corresponds to the y-values.
-
-        Returns:
-        - A normal distribution over tensors of shape [B, num_latents]
-        - log_var
-        """
-        # Concat location (x) and value (y) along the filter axes
         encoder_input = torch.cat([x, y], dim=-1)
 
         # Pass final axis through MLP
         encoded = self._input_layer(encoder_input)
-        encoded = self._encoder(encoded)
+        for layer in self._encoder:
+            encoded = torch.relu(layer(encoded))
 
-        # Self-attention aggregator
-        attention_output = self._self_attention(encoded, encoded, encoded)
-        mean_repr = attention_output.mean(dim=1)
+        # Aggregator: take the mean over all points
+        if self._use_self_attn:
+            attention_output = self._self_attention(encoded, encoded, encoded)
+            mean_repr = attention_output.mean(dim=1)
+        else:
+            mean_repr = encoded.mean(dim=1)
 
         # Have further MLP layers that map to the parameters of the Gaussian latent
-        mean_repr = self._penultimate_layer(mean_repr)
+        mean_repr = torch.relu(self._penultimate_layer(mean_repr))
 
         # Then apply further linear layers to output latent mu and log sigma
         mean = self._mean(mean_repr)
         log_var = self._log_var(mean_repr)
 
-        # Clip it in the log domain, so it can only approach self.min_std, this helps aboid mode collapase
-        if self.use_lvar:
-            log_var = log_var + math.log(self.min_std)
+        # Clip it in the log domain, so it can only approach self.min_std, this helps avoid mode collapase
+        # 2 ways, a better but untested way using the more stable log domain, and the way from the deepmind repo
+        if self._use_lvar:
+            log_var = torch.clamp(F.logsigmoid(log_var), np.log(self._min_std))
             sigma = torch.exp(0.5 * log_var)
         else:
-            sigma = self.min_std + (1 - self.min_std) * torch.sigmoid(log_var * 0.5)
+            sigma = self._min_std + (1 - self._min_std) * torch.sigmoid(log_var * 0.5)
         dist = torch.distributions.Normal(mean, sigma)
         return dist, log_var
 
 
 class DeterministicEncoder(nn.Module):
-    """
-    Deterministic Encoder [r]
-    """
-
     def __init__(
         self,
         input_dim,
         x_dim,
         hidden_dim=32,
         n_d_encoder_layers=3,
-        self_attention_type="multihead",
-        cross_attention_type="multihead",
+        self_attention_type="dot",
+        cross_attention_type="dot",
+        use_self_attn=False,
+        attention_layers=2,
+        batchnorm=False,
         dropout=0,
         attention_dropout=0,
-        n_heads=8,
-        attention_layers=2,
     ):
         super().__init__()
-        self._input_layer = NPBlockRelu2d(input_dim, hidden_dim, dropout)
-        self._d_encoder = nn.Sequential(
-            *[
-                NPBlockRelu2d(hidden_dim, hidden_dim, dropout)
+        self._use_self_attn = use_self_attn
+        self._input_layer = nn.Linear(input_dim, hidden_dim)
+        self._d_encoder = nn.ModuleList(
+            [
+                NPBlockRelu2d(
+                    hidden_dim,
+                    hidden_dim,
+                    batchnorm=batchnorm,
+                    dropout=attention_dropout,
+                )
                 for _ in range(n_d_encoder_layers)
             ]
         )
-        self._self_attention = Attention(
-            hidden_dim, self_attention_type, dropout=attention_dropout, n_heads=n_heads, attention_layers=attention_layers
-        )
+        if use_self_attn:
+            self._self_attention = Attention(
+                hidden_dim,
+                self_attention_type,
+                attention_layers,
+                rep="identity",
+                dropout=attention_dropout,
+            )
         self._cross_attention = Attention(
-            hidden_dim, cross_attention_type, dropout=attention_dropout, n_heads=n_heads, attention_layers=attention_layers
+            hidden_dim,
+            cross_attention_type,
+            x_dim=x_dim,
+            attention_layers=attention_layers,
         )
-        self._target_transform = nn.Linear(x_dim, hidden_dim)
-        self._context_transform = nn.Linear(x_dim, hidden_dim)
 
     def forward(self, context_x, context_y, target_x):
-        # concat context location (x), context value (y)
+        # Concatenate x and y along the filter axes
         d_encoder_input = torch.cat([context_x, context_y], dim=-1)
 
         # Pass final axis through MLP
         d_encoded = self._input_layer(d_encoder_input)
-        d_encoded = self._d_encoder(d_encoded)
+        for layer in self._d_encoder:
+            d_encoded = torch.relu(layer(d_encoded))
 
-        # Apply self attention
-        d_encoded = self._self_attention(d_encoded, d_encoded, d_encoded)
+        if self._use_self_attn:
+            d_encoded = self._self_attention(d_encoded, d_encoded, d_encoded)
 
-        # query: target_x, key: context_x, value: d_encoded (representation of x)
-        k = self._context_transform(context_x)
-        q = self._target_transform(target_x)
+        # Apply attention
+        h = self._cross_attention(context_x, d_encoded, target_x)
 
-        # Cross Attention
-        r = self._cross_attention(k, d_encoded, q)
-        return r
+        return h
 
 
 class Decoder(nn.Module):
@@ -247,51 +337,55 @@ class Decoder(nn.Module):
         hidden_dim=32,
         latent_dim=32,
         n_decoder_layers=3,
-        min_std=0.1,
-        dropout=0,
+        use_deterministic_path=True,
+        min_std=0.01,
         use_lvar=False,
-        use_deterministic_path=True
+        batchnorm=False,
+        dropout=0,
     ):
-        super().__init__()
-        self.use_lvar = use_lvar
-        self._target_transform = NPBlockRelu2d(x_dim, hidden_dim, dropout)
-        self.use_deterministic_path = use_deterministic_path
+        super(Decoder, self).__init__()
+        self._target_transform = nn.Linear(x_dim, hidden_dim)
         if use_deterministic_path:
             hidden_dim_2 = 2 * hidden_dim + latent_dim
         else:
             hidden_dim_2 = hidden_dim + latent_dim
-        self._decoder = nn.Sequential(
-            *[
-                NPBlockRelu2d(hidden_dim_2, hidden_dim_2, dropout)
+        self._decoder = nn.ModuleList(
+            [
+                NPBlockRelu2d(
+                    hidden_dim_2, hidden_dim_2, batchnorm=batchnorm, dropout=dropout
+                )
                 for _ in range(n_decoder_layers)
             ]
         )
         self._mean = nn.Linear(hidden_dim_2, y_dim)
         self._std = nn.Linear(hidden_dim_2, y_dim)
-        self.min_std = min_std
+        self._use_deterministic_path = use_deterministic_path
+        self._min_std = min_std
+        self._use_lvar = use_lvar
 
     def forward(self, r, z, target_x):
+        # concatenate target_x and representation
         x = self._target_transform(target_x)
 
-        # concatenate target_x and representation
-        if self.use_deterministic_path:
+        if self._use_deterministic_path:
             z = torch.cat([r, z], dim=-1)
+
         representation = torch.cat([z, x], dim=-1)
 
         # Pass final axis through MLP
-        representation = self._decoder(representation)
+        for layer in self._decoder:
+            representation = torch.relu(layer(representation))
 
         # Get the mean and the variance
         mean = self._mean(representation)
         log_sigma = self._std(representation)
 
-        # Bound the variance
-        if self.use_lvar:
-            log_sigma = log_sigma + math.log(self.min_std)
+        # Bound or clamp the variance
+        if self._use_lvar:
+            log_sigma = torch.clamp(log_sigma, math.log(self._min_std))
             sigma = torch.exp(log_sigma)
         else:
-            sigma = self.min_std + (1-self.min_std) * F.softplus(log_sigma)
+            sigma = self._min_std + (1 - self._min_std) * F.softplus(log_sigma)
 
-        # Dist
         dist = torch.distributions.Normal(mean, sigma)
         return dist, log_sigma

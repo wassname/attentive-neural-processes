@@ -84,7 +84,7 @@ def plot_from_loader(
 
     model.eval()
     with torch.no_grad():
-        y_pred, kl, loss_test, y_std = model(context_x, context_y, target_x, target_y)
+        y_pred, kl, loss_test, loss_mse, y_std = model(context_x, context_y, target_x, target_y)
 
         if plot:
             plt.figure()

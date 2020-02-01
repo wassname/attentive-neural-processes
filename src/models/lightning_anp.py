@@ -24,24 +24,27 @@ class LatentModelPL(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         assert all(torch.isfinite(d).all() for d in batch)
         context_x, context_y, target_x, target_y = batch
-        y_pred, kl, loss, y_std = self.forward(context_x, context_y, target_x, target_y)
+        y_pred, kl, loss, loss_mse, y_std = self.forward(context_x, context_y, target_x, target_y)
         tensorboard_logs = {
             "train/loss": loss,
             "train/kl": kl.mean(),
             "train/std": y_std.mean(),
+            "train/mse": loss_mse.mean(),
             "train/mse": F.mse_loss(y_pred, target_y).mean(),
         }
+        assert torch.isfinite(loss)
         # print('device', next(self.model.parameters()).device)
         return {"loss": loss, "log": tensorboard_logs}
 
     def validation_step(self, batch, batch_idx):
         assert all(torch.isfinite(d).all() for d in batch)
         context_x, context_y, target_x, target_y = batch
-        y_pred, kl, loss, y_std = self.forward(context_x, context_y, target_x, target_y)
+        y_pred, kl, loss, loss_mse, y_std = self.forward(context_x, context_y, target_x, target_y)
         
         tensorboard_logs = {
             "val_loss": loss,
             "val/kl": kl.mean(),
+            "val/mse": loss_mse.mean(),
             "val/std": y_std.mean(),
             "val/mse": F.mse_loss(y_pred, target_y).mean(),
         }
