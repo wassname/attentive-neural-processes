@@ -5,8 +5,9 @@ from argparse import ArgumentParser
 from test_tube import Experiment, HyperOptArgumentParser
 from src.models.model import LatentModel
 from src.data.smart_meter import collate_fns, SmartMeterDataSet, get_smartmeter_df
-from src.plot import plot_from_loader_to_tensor
+from src.plot import plot_from_loader_to_tensor, plot_from_loader
 from src.utils import ObjectDict
+from matplotlib import pyplot as plt
 
 
 
@@ -51,13 +52,17 @@ class LatentModelPL(pl.LightningModule):
         return {"val_loss": loss, "log": tensorboard_logs}
 
     def validation_end(self, outputs):
-        if self.hparams["vis_i"] > 0:
+        if int(self.hparams["vis_i"]) > 0:
             # https://github.com/PytorchLightning/pytorch-lightning/blob/f8d9f8f/pytorch_lightning/core/lightning.py#L293
             loader = self.val_dataloader()[0]
-            vis_i = min(self.hparams["vis_i"], len(loader.dataset))
+            vis_i = min(int(self.hparams["vis_i"]), len(loader.dataset))
             # print('vis_i', vis_i)
-            image = plot_from_loader_to_tensor(loader, self.model, i=vis_i)
-            self.logger.experiment.add_image('val/image', image, self.trainer.global_step)
+            if isinstance(self.hparams["vis_i"], str):
+                image = plot_from_loader(loader, self.model, i=int(vis_i))
+                plt.show()
+            else:
+                image = plot_from_loader_to_tensor(loader, self.model, i=vis_i)
+                self.logger.experiment.add_image('val/image', image, self.trainer.global_step)
         
         keys = outputs[0]["log"].keys()
         # tensorboard_logs = {}
