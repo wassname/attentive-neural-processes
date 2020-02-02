@@ -3,6 +3,7 @@
 /lightning_logs/
 events.out.*
 /optuna_result/
+/runs/
 
 # Created by https://www.gitignore.io/api/code,linux,macos,python,windows,jupyternotebook,jupyternotebooks
 # Edit at https://www.gitignore.io/?templates=code,linux,macos,python,windows,jupyternotebook,jupyternotebooks
