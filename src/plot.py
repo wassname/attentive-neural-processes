@@ -80,6 +80,7 @@ def plot_from_loader(
     x_rows, y_rows = loader.dataset.get_rows(i)
     max_num_context = context_x.shape[1]
     y_context_rows = y_rows[:max_num_context]
+    y_target_rows = y_rows[max_num_context:]
     dt = y_context_rows.index[0]
 
     model.eval()
@@ -90,7 +91,7 @@ def plot_from_loader(
             plt.figure()
             plt.title(title + f" loss={loss_test: 2.2g} {dt}")
             plot_rows(
-                y_rows,
+                y_target_rows,
                 y_context_rows,
                 y_pred.detach().cpu().numpy(),
                 y_std.detach().cpu().numpy(),
