@@ -87,7 +87,7 @@ class LatentModelPL(pl.LightningModule):
         return self.validation_end(*args, **kwargs)
 
     def configure_optimizers(self):
-        optim = torch.optim.Adam(self.parameters(), lr=self.hparams["learning_rate"])
+        optim = torch.optim.WAdam(self.parameters(), lr=self.hparams["learning_rate"])
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, patience=2, verbose=True, min_lr=1e-5) # note early stopping has patient 3
         return [optim], [scheduler]
 
@@ -151,13 +151,8 @@ class LatentModelPL(pl.LightningModule):
         """
         # MODEL specific
         parser = HyperOptArgumentParser(strategy=parent_parser.strategy, parents=[parent_parser], add_help=False)
-        parser.opt_range("--learning_rate", default=1e-4, type=float, tunable=True, high=1e-2, low=1e-5, log_base=10)
-        parser.add_argument("--batch_size", default=16, type=int)
-
-        parser.add_argument("--x_dim", default=16, type=int)
-        parser.add_argument("--y_dim", default=1, type=int)
-        parser.add_argument("--vis_i", default=670, type=int)
-
+        parser.opt_range("--learning_rate", default=1e-3, type=float, tunable=True, high=1e-2, low=1e-5, log_base=10)
+        
         parser.opt_list("--hidden_dim", default=128, type=int, tunable=True, options=[8*2**i for i in range(8)])
         parser.opt_list("--latent_dim", default=128, type=int, tunable=True, options=[8*2**i for i in range(8)])
         parser.add_argument("--num_heads", default=8, type=int)
@@ -177,13 +172,22 @@ class LatentModelPL(pl.LightningModule):
         parser.opt_list("--det_enc_cross_attn_type", default="multihead", type=str, tunable=True, options=['uniform', 'dot', 'multihead', 'ptmultihead'])
 
         parser.opt_list("--use_lvar", default=False, type=bool, tunable=True, options=[False, True])
+        parser.opt_list("--use_rnn", default=False, type=bool, tunable=True, options=[False, True])
         parser.opt_list("--use_deterministic_path", default=True, tunable=True, type=bool, options=[False, True])
-
+        parser.opt_list("--use_self_attn", default=True, tunable=True, type=bool, options=[False, True])
+        parser.opt_list("--batchnorm", default=True, tunable=True, type=bool, options=[False, True])
+        
         # training specific (for this model)
+        parser.add_argument("--context_in_target", default=True, type=bool)
         parser.add_argument("--grad_clip", default=0, type=float)
         parser.add_argument("--num_context", type=int, default=24 * 2)
         parser.add_argument("--num_extra_target", type=int, default=24)
         parser.add_argument("--max_nb_epochs", default=20, type=int)
         parser.add_argument("--num_workers", default=4, type=int)
+
+        parser.add_argument("--batch_size", default=16, type=int)
+        parser.add_argument("--x_dim", default=16, type=int)
+        parser.add_argument("--y_dim", default=1, type=int)
+        parser.add_argument("--vis_i", default=670, type=int)
         return parser
 

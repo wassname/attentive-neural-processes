@@ -1,12 +1,12 @@
 # Using recurrent attentive neural processes for forecasting power usage
 
-And also implements [Recurrent Attentive Neural Process for Sequential Data](https://arxiv.org/abs/1910.09323) (ANP-RNN)
+This repo implements ["Recurrent Attentive Neural Process for Sequential Data"](https://arxiv.org/abs/1910.09323) (ANP-RNN) and tests them on real data.
 
 ![](docs/np_lstm.jpeg)
 
 This implementation has lots of options so you can run it as a [Attentive Neural Process](https://arxiv.org/abs/1901.05761) (ANP), or NP.
 
-I've always made lots of weaks for flexibility and stability and [replicated the DeepMind ANP results](anp_1d_regression.ipynb) in pytorch. The replication, qualitativily seems like a better match than the other pytorch versions of ANP (as of 2019-11-01).
+I've always made lots of tweaks for flexibility and stability and [replicated the DeepMind ANP results](anp_1d_regression.ipynb) in pytorch. The replication qualitatively seems like a better match than the other pytorch versions of ANP (as of 2019-11-01).
 
 
 
@@ -29,10 +29,10 @@ I've always made lots of weaks for flexibility and stability and [replicated the
 
 Here the black dots are input data, the dotted line is the true data. The blue line is the prediction, and the blue shadow is the uncertainty to one standard deviation.
 
-I chose a a difficult example below, it's a window in the test set that deviates from the previous pattern. Given 3 days inputs, it must predict the next day, and the next day has higher power usage than previously. The trained model manages to predict it based on the inputs.
+I chose a difficult example below, it's a window in the test set that deviates from the previous pattern. Given 3 days inputs, it must predict the next day, and the next day has higher power usage than previously. The trained model manages to predict it based on the inputs.
 
 
-### ANP-RNN Results
+### Example ANP-RNN outputs
 
 ![](docs/anp-rnn_2.png)
 
@@ -40,7 +40,7 @@ I chose a a difficult example below, it's a window in the test set that deviates
 
 ![](docs/anp-rnn_4.png)
 
-### ANP Results (sequential)
+### Example ANP outputs (sequential)
 
 ![](docs/1.png)
 
@@ -52,7 +52,7 @@ I chose a a difficult example below, it's a window in the test set that deviates
 
 ![](docs/19.png)
 
-### LSTM Baseline
+### Example LSTM Baseline outputs
 
 Compare this to a quick LSTM baseline below, which didn't predict this divergance from the pattern. (Bear in mind that I didn't tweak this model as much). The uncertainty and prediction are also less smooth and the log probability is lower.
 
@@ -70,7 +70,7 @@ This is based on the code listed in the next section, with some changes. The mos
 
 Changes for a predictive use case:
 - target points are always in the future, context is in the past
-- context and and targets are still sampled randomly during training
+- context and targets are still sampled randomly during training
 
 
 Changes for stability:
@@ -90,8 +90,11 @@ I put some work into replicating the behaviour shown in the [original deepmind t
 Compare deepmind:
 - ![](docs/deepmind1.png)
 
-And this repo (anp_1d_regression.ipynb)
+And this repo with an ANP (anp_1d_regression.ipynb)
 - ![](docs/replicate2.png)
+
+And a ANP-RNN
+- ![](docs/anp_rnn_1d.png)
 
 It's just a qualitative comparison but we see the same kind of overfitting with uncertainty being tight where lots of data points exist, and wide where they do not. However this repo seems to miss points occasionally.
 
@@ -105,4 +108,4 @@ A list of projects I used as reference or modified to make this one:
 - Second pytorch implementation KurochkinAlexey (has some bugs currently) https://github.com/KurochkinAlexey/Attentive-neural-processes/blob/master/anp_1d_regression.ipynb
 - If you want to try vanilla neural processes: https://github.com/EmilienDupont/neural-processes/blob/master/example-1d.ipynb
 
-I'm very gratefull for all these authors for sharing their work. It was a pleasure to dive deep into these models compare the differen't implementations.
+I'm very grateful for all these authors for sharing their work. It was a pleasure to dive deep into these models compare the different implementations.
