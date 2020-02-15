@@ -1,16 +1,13 @@
-# Using attentive neural processes for forecasting power usage
-
-This project uses [Attentive Neural Process](https://arxiv.org/abs/1901.05761) (ANP) on kaggle smart meter data.
-
-![](docs/anp.png)
+# Using recurrent attentive neural processes for forecasting power usage
 
 And also implements [Recurrent Attentive Neural Process for Sequential Data](https://arxiv.org/abs/1910.09323) (ANP-RNN)
 
-![](docs/anp_rnn.png.jpeg)
+![](docs/np_lstm.jpeg)
 
-I'm using them in a weird way since I'm predicting ahead instead of infilling, however they perform well.
+This implementation has lots of options so you can run it as a [Attentive Neural Process](https://arxiv.org/abs/1901.05761) (ANP), or NP.
 
-I've always made lots of weaks for flexibility and stability and [replicated the deepmind results](anp_1d_regression.ipynb) in pytorch. This seems better than the other pytorch versions of ANP (as of 2019-11-01).
+I've always made lots of weaks for flexibility and stability and [replicated the DeepMind ANP results](anp_1d_regression.ipynb) in pytorch. The replication, qualitativily seems like a better match than the other pytorch versions of ANP (as of 2019-11-01).
+
 
 
 ## Usage
@@ -34,13 +31,24 @@ Here the black dots are input data, the dotted line is the true data. The blue l
 
 I chose a a difficult example below, it's a window in the test set that deviates from the previous pattern. Given 3 days inputs, it must predict the next day, and the next day has higher power usage than previously. The trained model manages to predict it based on the inputs.
 
+
+### ANP-RNN Results
+
+![](docs/anp-rnn_2.png)
+
+![](docs/anp-rnn_3.png)
+
+![](docs/anp-rnn_4.png)
+
+### ANP Results (sequential)
+
 ![](docs/1.png)
 
 ![](docs/4.png)
 
 ![](docs/7.png)
 
-![](docs/12.png)
+![](docs/12.png)****
 
 ![](docs/19.png)
 
@@ -75,7 +83,7 @@ Changes for stability:
 - use batchnorm and dropout on channel dimensions
 - check and skip nonfinite values because for extreme inputs we can still get nan's
 
-## Replicating tensorflow behaviour
+## Replicating tensorflow ANP behaviour
 
 I put some work into replicating the behaviour shown in the [original deepmind tensorflow notebook](https://github.com/deepmind/neural-processes/blob/master/attentive_neural_process.ipynb).
 
@@ -86,7 +94,6 @@ And this repo (anp_1d_regression.ipynb)
 - ![](docs/replicate2.png)
 
 It's just a qualitative comparison but we see the same kind of overfitting with uncertainty being tight where lots of data points exist, and wide where they do not. However this repo seems to miss points occasionally.
-
 
 
 ## See also:

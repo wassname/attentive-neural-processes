@@ -40,6 +40,7 @@ def plot_rows(
 
     # Start with true data and use it to get ylimits (that way they are constant)
     plt.plot(target_y_rows.index, target_y_rows.values, "k:", linewidth=2, label="true")
+    plt.plot(context_y_rows.index, context_y_rows.values, "k:", linewidth=2, label="true")
     ylims = plt.ylim()
 
     # plot predictions
@@ -53,8 +54,17 @@ def plot_rows(
         interpolate=True,
         label="uncertainty",
     )
+    plt.fill_between(
+        target_y_rows.index,
+        pred_y[0, :, 0] - std[0, :, 0] * 2,
+        pred_y[0, :, 0] + std[0, :, 0] * 2,
+        alpha=0.125,
+        facecolor="blue",
+        interpolate=True,
+        label="uncertainty",
+    )
 
-    # Finally context, we do this with pandas so it will override x ax and make it nice
+    # Finally context, we do this with   pandas so it will override x ax and make it nice
     context_y_rows[label].plot(
         style="ko", linewidth=2, label="input data", ax=plt.gca()
     )
@@ -70,18 +80,30 @@ def plot_rows(
 
 
 def plot_from_loader(
-    loader, model, i=0, undo_log=False, title="", plot=True, legend=False
+    loader, model, i=0, undo_log=False, title="", plot=True, legend=False, context_in_target=None
 ):
+    if context_in_target is None:
+        context_in_target = model.hparams["context_in_target"]
+    
     device = next(model.parameters()).device
     data = loader.collate_fn([loader.dataset[i]], sample=False)
     data = [d.to(device) for d in data]
-    context_x, context_y, target_x, target_y = data
+    context_x, context_y, target_x_extra, target_y_extra = data
+    target_x = target_x_extra
+    target_y = target_y_extra
 
+    # Get context, like dates, from dataset
     x_rows, y_rows = loader.dataset.get_rows(i)
     max_num_context = context_x.shape[1]
     y_context_rows = y_rows[:max_num_context]
-    y_target_rows = y_rows[max_num_context:]
-    dt = y_context_rows.index[0]
+    y_target_extra_rows = y_rows[max_num_context:]
+    dt = y_target_extra_rows.index[0]
+
+    # # for the plotting we are doing to run prediction on the context points too
+    if not context_in_target:
+        target_x = torch.cat([context_x, target_x_extra], 1)
+        target_y = torch.cat([context_y, target_y_extra], 1)
+    y_target_rows = y_rows
 
     model.eval()
     with torch.no_grad():

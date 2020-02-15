@@ -147,10 +147,11 @@ class LatentModel(nn.Module):
 
         dist, log_sigma = self._decoder(r, z, target_x)
         if target_y is not None:
+
             if self._use_lvar:
-                log_p = log_prob_sigma(target_y, dist.loc, log_sigma).mean(-1) # [B, T_target, Y].mean(-1)
+                log_p = log_prob_sigma(target_y, dist.loc, log_sigma).mean(-1)  # [B, T_target, Y].mean(-1)
                 kl_loss = kl_loss_var(dist_prior.loc, log_var_prior,
-                                      dist_post.loc, log_var_post).mean(-1) # [B, R].mean(-1)
+                                      dist_post.loc, log_var_post).mean(-1)  # [B, R].mean(-1)
             else:
                 log_p = dist.log_prob(target_y).mean(-1)
                 kl_loss = torch.distributions.kl_divergence(

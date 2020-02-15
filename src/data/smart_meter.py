@@ -10,7 +10,7 @@ def npsample_batch(x, y, size=None, sort=True):
         inds.sort()
     return x[:, inds], y[:, inds]
 
-def collate_fns(max_num_context, max_num_extra_target, sample, sort=True):
+def collate_fns(max_num_context, max_num_extra_target, sample, sort=True, context_in_target=True):
     def collate_fn(batch, sample=sample):
         # Collate
         x = np.stack([x for x, y in batch], 0)
@@ -25,15 +25,14 @@ def collate_fns(max_num_context, max_num_extra_target, sample, sort=True):
 
         x[:, :max_num_context, -1] = 0  # Feature to let the model know this is past data
         n=x[:, max_num_context:, -1].shape[1]
-        x[:, max_num_context:, -1] = torch.arange(1, n+1)/1.0/n  # Feature to let the model know this is past data
+        x[:, max_num_context:, -1] = torch.arange(1, n + 1) / 1.0 / n  # Feature to let the model know this is past data
+        
         x_context = x[:, :max_num_context]
         y_context = y[:, :max_num_context]
     
         x_target_extra = x[:, max_num_context:]
         y_target_extra = y[:, max_num_context:]
 
-        # x = x_target_extra # torch.cat([x_context, x_target_extra], 1)
-        # y = y_target_extra  # torch.cat([y_context, y_target_extra], 1)            
         
         if sample:
 
@@ -46,12 +45,19 @@ def collate_fns(max_num_context, max_num_extra_target, sample, sort=True):
                 x_target_extra, y_target_extra, size=num_extra_target, sort=sort
             )
 
+        # do we want to compute loss over context+target_extra, or focus in on only target_extra?
+        if context_in_target:
+            x_target = torch.cat([x_context, x_target_extra], 1)
+            y_target = torch.cat([y_context, y_target_extra], 1)
+        else:
+            x_target = x_target_extra
+            y_target = y_target_extra
 
         assert (x_context[:, :, -1]==0).all()
         assert (x[:, -1, -1] > 0).all()
         # assert (x[:, 0, -1] == 0).all()
         
-        return x_context, y_context, x_target_extra, y_target_extra
+        return x_context, y_context, x_target, y_target
 
     return collate_fn
 

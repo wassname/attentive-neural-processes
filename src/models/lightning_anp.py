@@ -58,10 +58,10 @@ class LatentModelPL(pl.LightningModule):
             vis_i = min(int(self.hparams["vis_i"]), len(loader.dataset))
             # print('vis_i', vis_i)
             if isinstance(self.hparams["vis_i"], str):
-                image = plot_from_loader(loader, self.model, i=int(vis_i))
+                image = plot_from_loader(loader, self, i=int(vis_i))
                 plt.show()
             else:
-                image = plot_from_loader_to_tensor(loader, self.model, i=vis_i)
+                image = plot_from_loader_to_tensor(loader, self, i=vis_i)
                 self.logger.experiment.add_image('val/image', image, self.trainer.global_step)
         
         keys = outputs[0]["log"].keys()
@@ -109,7 +109,7 @@ class LatentModelPL(pl.LightningModule):
             batch_size=self.hparams["batch_size"],
             shuffle=True,
             collate_fn=collate_fns(
-                self.hparams["num_context"], self.hparams["num_extra_target"], sample=True
+                self.hparams["num_context"], self.hparams["num_extra_target"], sample=True, context_in_target=self.hparams["context_in_target"]
             ),
             num_workers=self.hparams["num_workers"],
         )
@@ -125,7 +125,7 @@ class LatentModelPL(pl.LightningModule):
             batch_size=self.hparams["batch_size"],
             shuffle=False,
             collate_fn=collate_fns(
-                self.hparams["num_context"], self.hparams["num_extra_target"], sample=False
+                self.hparams["num_context"], self.hparams["num_extra_target"], sample=False, context_in_target=self.hparams["context_in_target"]
             ),
         )
 
@@ -140,7 +140,7 @@ class LatentModelPL(pl.LightningModule):
             batch_size=self.hparams["batch_size"],
             shuffle=False,
             collate_fn=collate_fns(
-                self.hparams["num_context"], self.hparams["num_extra_target"], sample=False
+                self.hparams["num_context"], self.hparams["num_extra_target"], sample=False, context_in_target=self.hparams["context_in_target"]
             ),
         )
 
