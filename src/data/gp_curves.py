@@ -40,6 +40,7 @@ class GPCurvesReader(object):
         sigma_scale=1.0,
         random_kernel_parameters=True,
         testing=False,
+        sequential=False
     ):
         """Creates a regression dataset of functions sampled from a GP.
 
@@ -63,6 +64,7 @@ class GPCurvesReader(object):
         self._sigma_scale = sigma_scale
         self._random_kernel_parameters = random_kernel_parameters
         self._testing = testing
+        self._sequential = sequential
 
     def _gaussian_kernel(self, xdata, l1, sigma_f, sigma_noise=2e-2):
         """Applies the Gaussian kernel to generate curve data.
@@ -112,10 +114,10 @@ class GPCurvesReader(object):
         # If we are testing we want to have more targets and have them evenly
         # distributed in order to plot the function.
         if self._testing:
-            num_target = 400
+            num_target = num_context*2
             num_total_points = num_target
             x_values = (
-                torch.arange(-2, 2, 1.0 / 100).unsqueeze(0).repeat(self._batch_size, 1)
+                torch.linspace(-2, 2, num_target).unsqueeze(0).repeat(self._batch_size, 1)
             )
             x_values = x_values.unsqueeze(-1)
         # During training the number of target points and their x-positions are
@@ -126,6 +128,10 @@ class GPCurvesReader(object):
             x_values = (
                 torch.rand((self._batch_size, num_total_points, self._x_size)) * 4 - 2
             )
+
+        # For sequential
+        if self._sequential:
+            x_values = x_values.sort(dim=1)[0]
 
         # Set kernel parameters
         # Either choose a set of random parameters for the mini-batch
@@ -160,7 +166,6 @@ class GPCurvesReader(object):
         y_values = torch.matmul(
             cholesky, torch.randn((self._batch_size, self._y_size, num_total_points, 1))
         )
-
         # [batch_size, num_total_points, y_size]
         y_values = y_values.squeeze(3)
         y_values = y_values.permute(0, 2, 1)
@@ -172,6 +177,8 @@ class GPCurvesReader(object):
 
             # Select the observations
             idx = torch.randperm(num_target)
+            if self._sequential:
+                idx = idx.sort()[0]
             context_x = x_values[:, idx[:num_context]]
             context_y = y_values[:, idx[:num_context]]
 

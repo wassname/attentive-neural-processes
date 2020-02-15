@@ -53,10 +53,23 @@ class LatentModel(nn.Module):
                  batchnorm=False,
                  use_lvar=False,
                  attention_layers=2,
+                 use_rnn=False,
                  **kwargs,
                 ):
 
         super(LatentModel, self).__init__()
+
+        self._use_rnn = use_rnn
+
+        if self._use_rnn:
+            self._lstm = nn.LSTM(
+                input_size=x_dim,
+                hidden_size=hidden_dim,
+                num_layers=attention_layers,
+                dropout=dropout,
+                batch_first=True
+            )
+            x_dim = hidden_dim
 
         self._latent_encoder = LatentEncoder(
             x_dim + y_dim,
@@ -105,6 +118,15 @@ class LatentModel(nn.Module):
 
     def forward(self, context_x, context_y, target_x, target_y=None):
         num_targets = target_x.size(1)
+
+        if self._use_rnn:
+            # see https://arxiv.org/abs/1910.09323 where x is substituted with h = RNN(x)
+            # x need to be provided as [B, T, H]
+            x = torch.cat([context_x, target_x], dim=1)
+            # h: [B, T, num_direction * H]
+            h, _ = self._lstm(x)
+            context_x = h[:, :context_x.shape[1], :]
+            target_x = h[:, context_x.shape[1]:, :]
 
         dist_prior, log_var_prior = self._latent_encoder(context_x, context_y)
 
