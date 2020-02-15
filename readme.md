@@ -4,6 +4,10 @@ This project uses [Attentive Neural Process](https://arxiv.org/abs/1901.05761) (
 
 ![](docs/anp.png)
 
+And also implements [Recurrent Attentive Neural Process for Sequential Data](https://arxiv.org/abs/1910.09323) (ANP-RNN)
+
+![](docs/anp_rnn.png.jpeg)
+
 I'm using them in a weird way since I'm predicting ahead instead of infilling, however they perform well.
 
 I've always made lots of weaks for flexibility and stability and [replicated the deepmind results](anp_1d_regression.ipynb) in pytorch. This seems better than the other pytorch versions of ANP (as of 2019-11-01).
