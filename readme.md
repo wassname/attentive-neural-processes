@@ -22,23 +22,33 @@ I've also made lots of tweaks for flexibility and stability and [replicated the 
 
 
 - [Neural Processes for sequential data](#neural-processes-for-sequential-data)
-  - [Results](#results)
-  - [Example outputs](#example-outputs)
+  - [Experiment: Comparing models on real world data](#experiment-comparing-models-on-real-world-data)
+    - [Results](#results)
     - [Example LSTM baseline](#example-lstm-baseline)
     - [Example NP](#example-np)
     - [Example ANP outputs (sequential)](#example-anp-outputs-sequential)
     - [Example ANP-RNN outputs](#example-anp-rnn-outputs)
     - [Example of ANP-RNN with MCDropout](#example-of-anp-rnn-with-mcdropout)
-  - [Replicating DeepMind's tensorflow ANP behaviour](#replicating-deepminds-tensorflow-anp-behaviour)
-  - [Using Monte Carlo Dropout](#using-monte-carlo-dropout)
+  - [Experiment: Comparing models on toy 1d regression](#experiment-comparing-models-on-toy-1d-regression)
+    - [Results](#results-1)
+      - [Example outputs](#example-outputs)
+  - [Experiment: Using ANP-RNN + Monte Carlo Dropout](#experiment-using-anp-rnn--monte-carlo-dropout)
   - [Usage](#usage)
-  - [Smartmeter Data](#smartmeter-data)
-  - [Code](#code)
+    - [Smartmeter Data](#smartmeter-data)
+    - [Code](#code)
   - [ANP-RNN diagram](#anp-rnn-diagram)
   - [See also:](#see-also)
 
 
-## Results
+## Experiment: Comparing models on real world data
+
+Here I compare the models on smartmeter power demand data.
+
+The black dots are input data, the dotted line is the true data. The blue line is the prediction, and the blue shadow is the uncertainty to one standard deviation.
+
+I chose a difficult example below, it's a window in the test set that deviates from the previous pattern. Given 3 days inputs, it must predict the next day, and the next day has higher power usage than previously. The trained model manages to predict it based on the inputs.
+
+### Results
 
 Results on [*Smartmeter* prediction](./smartmeters-ANP-RNN.ipynb) (lower is better)
 
@@ -49,22 +59,6 @@ Results on [*Smartmeter* prediction](./smartmeters-ANP-RNN.ipynb) (lower is bett
 |ANP|-1.3|0.0072|
 |NP|-1.3|0.0040|
 |LSTM| | |
-
-Results on [toy 1d regression](./anp-rnn_1d_regression.ipynb)  (lower is better)
-
-|model|val_loss|
-|-----|---------|
-| **ANP-RNN(impr)**| **-1.3217**|
-| ANP-RNN| -0.62|
-| ANP| -0.4228|
-| ANP(impr)| -0.3182|
-| NP|  -1.2687 |
-
-## Example outputs
-
-Here the black dots are input data, the dotted line is the true data. The blue line is the prediction, and the blue shadow is the uncertainty to one standard deviation.
-
-I chose a difficult example below, it's a window in the test set that deviates from the previous pattern. Given 3 days inputs, it must predict the next day, and the next day has higher power usage than previously. The trained model manages to predict it based on the inputs.
 
 
 ### Example LSTM baseline
@@ -97,9 +91,24 @@ This has a better calibrated uncertainty and a better fit
 
 ![](docs/anp-rnn-mcdropout.png)
 
-## Replicating DeepMind's tensorflow ANP behaviour
+## Experiment: Comparing models on toy 1d regression
 
-I put some work into replicating the behaviour shown in the [original deepmind tensorflow notebook](https://github.com/deepmind/neural-processes/blob/master/attentive_neural_process.ipynb).
+I put some work into replicating the behaviour shown in the [original deepmind tensorflow notebook](https://github.com/deepmind/neural-processes/blob/master/attentive_neural_process.ipynb). At the same time I compared multiple models.
+
+### Results
+
+
+Results on [toy 1d regression](./anp-rnn_1d_regression.ipynb)  (lower is better)
+
+|model|val_loss|
+|-----|---------|
+| **ANP-RNN(impr)**| **-1.3217**|
+| ANP-RNN| -0.62|
+| ANP| -0.4228|
+| ANP(impr)| -0.3182|
+| NP|  -1.2687 |
+
+#### Example outputs
 
 Compare deepmind:
 
@@ -115,7 +124,7 @@ And a ANP-RNN
 
 It's just a qualitative comparison but we see the same kind of overfitting with uncertainty being tight where lots of data points exist, and wide where they do not. However this repo seems to miss points occasionally.
 
-## Using Monte Carlo Dropout
+## Experiment: Using ANP-RNN + Monte Carlo Dropout
 
 One more experiment is included:
 
@@ -149,7 +158,7 @@ For more details see the notebook [./smartmeters-ANP-RNN-mcdropout.ipynb](./smar
 - Start and run the notebook [smartmeters.ipynb](smartmeters-ANP-RNN.ipynb)
 - To see a toy 1d regression problem, look at [anp-rnn_1d_regression.ipynb](anp-rnn_1d_regression.ipynb)
 
-## Smartmeter Data
+### Smartmeter Data
 - Some data is included, you can get more from https://www.kaggle.com/jeanmidev/smart-meters-in-london/version/11
 - Inputs are: 
   - Weather
@@ -159,7 +168,7 @@ For more details see the notebook [./smartmeters-ANP-RNN-mcdropout.ipynb](./smar
 - Target is: mean power usage on block 0
 
 
-## Code
+### Code
 
 This is based on the code listed in the next section, with some changes. The most notable ones add stability, others are to make sure it can handle predicting into the future:
 
