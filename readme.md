@@ -4,34 +4,36 @@ This repo implements ["Recurrent Attentive Neural Process for Sequential Data"](
 
 ![](docs/anp-rnn_4.png)
 
+This repository has lots of options so you can run it as a ANP-RNN, or ANP or NP.
+
+- Models
+  - ANP-RNN ["Recurrent Attentive Neural Process for Sequential Data"](https://arxiv.org/abs/1910.09323) 
+  - ANP: [Attentive Neural Processes](https://arxiv.org/abs/1901.05761)
+  - NP: [Neural Processes](https://arxiv.org/abs/1807.01622)
+  - LSTM
+- Experiments:
+  - Monte Carlo Dropout
+- Data:
+  - Toy 1d regression
+  - Power prediction problem
+
+
+I've also made lots of tweaks for flexibility and stability and [replicated the DeepMind ANP results](anp_1d_regression.ipynb) in pytorch. The replication qualitatively seems like a better match than the other pytorch versions of ANP (as of 2019-11-01). You can see other code repositories in the see also section.
+
 
 - [Neural Processes for sequential data](#neural-processes-for-sequential-data)
-  - [Models](#models)
   - [Results](#results)
   - [Example outputs](#example-outputs)
+    - [Example LSTM baseline](#example-lstm-baseline)
     - [Example NP](#example-np)
     - [Example ANP outputs (sequential)](#example-anp-outputs-sequential)
     - [Example ANP-RNN outputs](#example-anp-rnn-outputs)
-    - [Example LSTM baseline](#example-lstm-baseline)
   - [Replicating DeepMind's tensorflow ANP behaviour](#replicating-deepminds-tensorflow-anp-behaviour)
   - [Using Monte Carlo Dropout](#using-monte-carlo-dropout)
   - [Usage](#usage)
   - [Smartmeter Data](#smartmeter-data)
   - [Code](#code)
   - [See also:](#see-also)
-
-## Models
-
-- ANP-RNN ["Recurrent Attentive Neural Process for Sequential Data"](https://arxiv.org/abs/1910.09323) 
-- ANP: [Attentive Neural Processes](https://arxiv.org/abs/1901.05761)
-- NP: [Neural Processes](https://arxiv.org/abs/1807.01622)
-
-
-This implementation has lots of options so you can run it as a ANP-RNN, or ANP or NP.
-
-I've also made lots of tweaks for flexibility and stability and [replicated the DeepMind ANP results](anp_1d_regression.ipynb) in pytorch. The replication qualitatively seems like a better match than the other pytorch versions of ANP (as of 2019-11-01). You can see other code repositories in the see also section.
-
-![](docs/np_lstm.jpeg)
 
 
 ## Results
@@ -63,6 +65,12 @@ Here the black dots are input data, the dotted line is the true data. The blue l
 I chose a difficult example below, it's a window in the test set that deviates from the previous pattern. Given 3 days inputs, it must predict the next day, and the next day has higher power usage than previously. The trained model manages to predict it based on the inputs.
 
 
+### Example LSTM baseline
+
+Here is an LSTM with a similar setup: it has access to the y value in the context (first half). It's output is inferier and it's uncertainty estimation if poor. It starts of high since it hasn't had much data yet, but it should increase, or at least stay high in the second half as it moves away from it's data.
+
+![](docs/lstm_std.png)
+
 ### Example NP
 
 Here we see underfitting, since the curve doesn't match the data
@@ -82,11 +90,10 @@ This has a better calibrated uncertainty and a better fit
 
 ![](docs/anp-rnn_4.png)
 
-### Example LSTM baseline
+A Diagram of ANP-RNN's
 
-Here is an LSTM with a similar setup: it has access to the y value in the context (first half). It's output is inferier and it's uncertainty estimation if poor. It starts of high since it hasn't had much data yet, but it should increase, or at least stay high in the second half as it moves away from it's data.
+![](docs/np_lstm.jpeg)
 
-![](docs/lstm_std.png)
 
 
 ## Replicating DeepMind's tensorflow ANP behaviour
