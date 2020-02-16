@@ -84,7 +84,7 @@ This has a better calibrated uncertainty and a better fit
 
 ### Example LSTM baseline
 
-Note that the LSTM has access to the y values for the first half of the plot (the context) to match the NP setup. It just predicts an output as opposed to uncertainty
+Here is an LSTM with a similar setup: it has access to the y value in the context (first half). It's output is inferier and it's uncertainty estimation if poor. It starts of high since it hasn't had much data yet, but it should increase, or at least stay high in the second half as it moves away from it's data.
 
 ![](docs/lstm_std.png)
 
@@ -94,13 +94,16 @@ Note that the LSTM has access to the y values for the first half of the plot (th
 I put some work into replicating the behaviour shown in the [original deepmind tensorflow notebook](https://github.com/deepmind/neural-processes/blob/master/attentive_neural_process.ipynb).
 
 Compare deepmind:
-- ![](docs/deepmind1.png)
+
+![](docs/deepmind1.png)
 
 And this repo with an ANP (anp_1d_regression.ipynb)
-- ![](docs/replicate2.png)
+
+![](docs/replicate2.png)
 
 And a ANP-RNN
-- ![](docs/anp_rnn_1d.png)
+
+![](docs/anp_rnn_1d.png)
 
 It's just a qualitative comparison but we see the same kind of overfitting with uncertainty being tight where lots of data points exist, and wide where they do not. However this repo seems to miss points occasionally.
 
@@ -110,17 +113,19 @@ One more experiment is included:
 
 The model tries to estimate the how unsure it is, but what about when it is out of sample? What about what it doesn't know that it doesn't know?
 
-We can estimate additional uncertainty by using Monte Carlo Dropout to see how uncertain the model acts in the presence of dropout. This doesn't capture all uncertainty, but I found that is does improve (decrease) the validation loss. The loss is calculated by the negative overlap of the output distribution and the target value so this improvement in the loss shows that MCDropout improved the estimation of the uncertainty.
-
-|Name|val_loss (n=100)|
+|Name|val_loss (n=100) [lower is better]|
 |--|--|
 |MCDropout| -1.40|
-|Inference| -0.64|
+|Normal| -0.64|
+
+We can estimate additional uncertainty by using Monte Carlo Dropout to see how uncertain the model acts in the presence of dropout. This doesn't capture all uncertainty, but I found that is does improve (decrease) the validation loss. The loss is calculated by the negative overlap of the output distribution and the target value so this improvement in the loss shows that MCDropout improved the estimation of the uncertainty.
 
 With MCDropout:
+
 ![](docs/anp-rnn-mcdropout.png)
 
 Without
+
 ![](docs/anp-rnn-nodropout.png)
 
 For more details see the notebook [./smartmeters-ANP-RNN-mcdropout.ipynb](./smartmeters-ANP-RNN-mcdropout.ipynb)
