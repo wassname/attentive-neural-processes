@@ -12,6 +12,7 @@ import torchvision.transforms as transforms
 from argparse import ArgumentParser
 import json
 import pytorch_lightning as pl
+import math
 from matplotlib import pyplot as plt
 import torch
 import io
@@ -22,6 +23,14 @@ from src.data.smart_meter import get_smartmeter_df
 
 from src.utils import ObjectDict
 
+def log_prob_sigma(value, loc, log_scale):
+    """A slightly more stable (not confirmed yet) log prob taking in log_var instead of scale.
+    modified from https://github.com/pytorch/pytorch/blob/2431eac7c011afe42d4c22b8b3f46dedae65e7c0/torch/distributions/normal.py#L65
+    """
+    var = torch.exp(log_scale * 2)
+    return (
+        -((value - loc) ** 2) / (2 * var) - log_scale - math.log(math.sqrt(2 * math.pi))
+    )
 
 class SequenceDfDataSet(torch.utils.data.Dataset):
     def __init__(self, df, hparams, label_names=None, train=True, transforms=None):
@@ -70,9 +79,10 @@ class SequenceDfDataSet(torch.utils.data.Dataset):
 
 
 class LSTMNet(nn.Module):
-    def __init__(self, hparams):
+    def __init__(self, hparams, _min_std = 0.05):
         super().__init__()
         self.hparams = hparams
+        self._min_std = _min_std
 
         self.lstm1 = nn.LSTM(
             input_size=self.hparams.input_size,
@@ -86,13 +96,16 @@ class LSTMNet(nn.Module):
             self.hparams.hidden_size
             * (self.hparams.bidirectional + 1)
         )
-        self.linear = nn.Linear(self.hidden_out_size, 1)
+        self.mean = nn.Linear(self.hidden_out_size, 1)
+        self.std = nn.Linear(self.hidden_out_size, 1)
 
     def forward(self, x):
         outputs, (h_out, _) = self.lstm1(x)
         # outputs: [B, T, num_direction * H]
-        y = self.linear(outputs).squeeze(2)
-        return y
+        mean = self.mean(outputs).squeeze(2)
+        log_sigma = self.std(outputs).squeeze(2)
+        log_sigma = torch.clamp(log_sigma, math.log(self._min_std), -math.log(1e-5))
+        return mean, log_sigma
 
 
 class LSTM_PL(pl.LightningModule):
@@ -113,20 +126,40 @@ class LSTM_PL(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         # REQUIRED
         x, y = batch
-        y_hat = self.forward(x)
+        mean, log_sigma = self.forward(x)
+
+        # Don't catch loss on context window
+        mean = mean[:, self.hparams.window_length:]
+        log_sigma = log_sigma[:, self.hparams.window_length:]
+
+        sigma = torch.exp(log_sigma)
+        y_dist = torch.distributions.Normal(mean, sigma)
+
         y = y[:, self.hparams.window_length:]
-        y_hat = y_hat[:, self.hparams.window_length:]
-        loss = F.mse_loss(y_hat, y)
-        tensorboard_logs = {"train_loss": loss}
+
+        loss_mse = F.mse_loss(mean, y)
+        loss_p = - log_prob_sigma(y, mean, log_sigma).mean()
+        loss = loss_p # + loss_mse
+        tensorboard_logs = {"train/loss": loss, 'train/loss_mse': loss_mse, "train/loss_p": loss_p, "train/sigma": sigma.mean()}
         return {"loss": loss, "log": tensorboard_logs}
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
-        y_hat = self.forward(x)
+        mean, log_sigma = self.forward(x)
+
+        # Don't catch loss on context window
+        mean = mean[:, self.hparams.window_length:]
+        log_sigma = log_sigma[:, self.hparams.window_length:]
+
+        sigma = torch.exp(log_sigma)
+        y_dist = torch.distributions.Normal(mean, sigma)
+
         y = y[:, self.hparams.window_length:]
-        y_hat = y_hat[:, self.hparams.window_length:]
-        loss = F.mse_loss(y_hat, y)
-        tensorboard_logs = {"val_loss": loss}
+
+        loss_mse = F.mse_loss(mean, y)
+        loss_p = -log_prob_sigma(y, mean, log_sigma).mean()
+        loss = loss_p # + loss_mse
+        tensorboard_logs = {"val_loss": loss, 'val/loss':loss, 'val/loss_mse': loss_mse, "val/loss_p": loss_p, "val/sigma": sigma.mean()}
         return {"val_loss": loss, "log": tensorboard_logs}
 
     def validation_end(self, outputs):
@@ -135,10 +168,10 @@ class LSTM_PL(pl.LightningModule):
             loader = self.val_dataloader()[0]
             vis_i = min(int(self.hparams["vis_i"]), len(loader.dataset))
         if isinstance(self.hparams["vis_i"], str):
-            image = plot_from_loader(loader, self, vis_i=vis_i, window_len=self.hparams["window_length"])
+            image = plot_from_loader(loader, self, vis_i=vis_i)
             plt.show()
         else:
-            image = plot_from_loader_to_tensor(loader, self, vis_i=vis_i, window_len=self.hparams["window_length"])
+            image = plot_from_loader_to_tensor(loader, self, vis_i=vis_i)
             self.logger.experiment.add_image(
                 "val/image", image, self.trainer.global_step
             )
@@ -239,7 +272,7 @@ class LSTM_PL(pl.LightningModule):
         return parser
 
 
-def plot_from_loader(loader, model, vis_i=670, n=1, window_len=0):
+def plot_from_loader(loader, model, vis_i=670, n=1):
     dset_test = loader.dataset
     label_names = dset_test.label_names
     y_trues = []
@@ -252,20 +285,37 @@ def plot_from_loader(loader, model, vis_i=670, n=1, window_len=0):
         x = x[None, :].to(device)
         model.eval()
         with torch.no_grad():
-            y_hat = model.forward(x)
+            y_hat, log_sigma = model.forward(x)
             y_hat = y_hat.cpu().squeeze(0).numpy()
+            sigma = log_sigma.exp().cpu().squeeze(0).numpy()
 
         dt = y_rows.iloc[0].name
 
         y_hat_rows = y_rows.copy()
         y_hat_rows[label_names[0]] = y_hat
+        y_hat_rows['sigma'] = sigma
         y_trues.append(y_rows)
         y_preds.append(y_hat_rows)
 
+    df_trues = pd.concat(y_trues)
+    df_preds = pd.concat(y_preds)
+
     plt.figure()
-    pd.concat(y_trues)[label_names[0]].plot(label="y_true")
+    df_trues[label_names[0]].plot(label="y_true")
     ylims = plt.ylim()
-    pd.concat(y_preds)[label_names[0]][window_len:].plot(label="y_pred")
+    df_preds[label_names[0]][window_len:].plot(label="y_pred")
+
+    std = df_preds['sigma'][window_len:]
+    mean = df_preds[label_names[0]][window_len:]
+    plt.fill_between(
+        df_preds.index[window_len:],
+        mean - std,
+        mean + std,
+        alpha=0.25,
+        facecolor="blue",
+        interpolate=True,
+        label="uncertainty",
+    )
     plt.legend()
     t_ahead = pd.Timedelta("30T") * model.hparams.target_length
     plt.title(f"predicting {t_ahead} ahead")

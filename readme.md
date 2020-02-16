@@ -12,6 +12,7 @@ This repo implements ["Recurrent Attentive Neural Process for Sequential Data"](
     - [Example NP](#example-np)
     - [Example ANP outputs (sequential)](#example-anp-outputs-sequential)
     - [Example ANP-RNN outputs](#example-anp-rnn-outputs)
+    - [Example LSTM baseline](#example-lstm-baseline)
   - [Replicating DeepMind's tensorflow ANP behaviour](#replicating-deepminds-tensorflow-anp-behaviour)
   - [Usage](#usage)
   - [Smartmeter Data](#smartmeter-data)
@@ -80,6 +81,11 @@ This has a better calibrated uncertainty and a better fit
 
 ![](docs/anp-rnn_4.png)
 
+### Example LSTM baseline
+
+Note that the LSTM has access to the y values for the first half of the plot (the context) to match the NP setup. It just predicts an output as opposed to uncertainty
+
+![](docs/lstm_std.png)
 
 
 ## Replicating DeepMind's tensorflow ANP behaviour

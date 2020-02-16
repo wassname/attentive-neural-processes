@@ -87,7 +87,7 @@ class LatentModelPL(pl.LightningModule):
         return self.validation_end(*args, **kwargs)
 
     def configure_optimizers(self):
-        optim = torch.optim.WAdam(self.parameters(), lr=self.hparams["learning_rate"])
+        optim = torch.optim.AdamW(self.parameters(), lr=self.hparams["learning_rate"])
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, patience=2, verbose=True, min_lr=1e-5) # note early stopping has patient 3
         return [optim], [scheduler]
 

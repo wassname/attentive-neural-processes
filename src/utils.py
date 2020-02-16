@@ -13,7 +13,7 @@ class ObjectDict(dict):
         if attr.startswith('_'):
             # https://stackoverflow.com/questions/10364332/how-to-pickle-python-object-derived-from-dict
             raise AttributeError
-        return self[attr]
+        return dict(self)[attr]
     
     @property
     def __dict__(self):
