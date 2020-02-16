@@ -17,4 +17,4 @@ class ObjectDict(dict):
     
     @property
     def __dict__(self):
-        return self
+        return dict(self)

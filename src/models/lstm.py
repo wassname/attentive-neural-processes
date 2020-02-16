@@ -33,7 +33,7 @@ class SequenceDfDataSet(torch.utils.data.Dataset):
         self.transforms = transforms
 
     def __len__(self):
-        return len(self.data) - +self.hparams.window_length - self.hparams.target_length
+        return len(self.data) - self.hparams.window_length - self.hparams.target_length - 1
 
     def iloc(self, idx):
         k = idx + self.hparams.window_length + self.hparams.target_length
@@ -41,8 +41,14 @@ class SequenceDfDataSet(torch.utils.data.Dataset):
         i = j - self.hparams.window_length
         assert i >= 0
         assert idx <= len(self.data)
+
         x_rows = self.data.iloc[i:j].copy()
-        y_rows = self.data.iloc[k].to_frame().T.copy()
+        # x_rows = x_rows.drop(columns=self.label_names)
+        # Note the NP models do have access to the previous labels for the context, we will allow the LSTM to do the same. Although it will likely just return an autoregressive solution for the first half...
+        x_rows.loc[x_rows.index[self.hparams.window_length:], self.label_names] = 0
+        assert (x_rows.loc[x_rows.index[self.hparams.window_length:], self.label_names]==0).all().all()
+
+        y_rows = self.data[self.label_names].iloc[i+1:j+1].copy()
         #         print(i,j,k)
 
         # add seconds since start of window index
@@ -56,11 +62,11 @@ class SequenceDfDataSet(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         x_rows, y_rows = self.iloc(idx)
 
-        y = y_rows[self.label_names].astype(np.float32).values
         x = x_rows.astype(np.float32).values
+        y = y_rows[self.label_names].astype(np.float32).values
         return (
             self.transforms(x).squeeze(0).float(),
-            self.transforms(y[:, None,])[:, 0, 0].float(),
+            self.transforms(y).squeeze(0).squeeze(-1).float(),
         )
 
 
@@ -79,15 +85,15 @@ class LSTMNet(nn.Module):
         )
         self.hidden_out_size = (
             self.hparams.hidden_size
-            * self.hparams.lstm_layers
             * (self.hparams.bidirectional + 1)
         )
         self.linear = nn.Linear(self.hidden_out_size, 1)
 
     def forward(self, x):
         outputs, (h_out, _) = self.lstm1(x)
-        h_out = h_out.permute((1, 0, 2)).reshape((-1, self.hidden_out_size))
-        return self.linear(h_out)
+        # outputs: [B, T, num_direction * H]
+        y = self.linear(outputs).squeeze(2)
+        return y       
 
 
 class LSTM_PL(pl.LightningModule):
@@ -122,9 +128,13 @@ class LSTM_PL(pl.LightningModule):
 
     def validation_end(self, outputs):
         # TODO send an image to tensroboard, like in the lighting_anp.py file
-        if self.hparams["vis_i"] > 0:
+        if int(self.hparams["vis_i"]) > 0:
             loader = self.val_dataloader()[0]
-            vis_i = min(self.hparams["vis_i"], len(loader.dataset))
+            vis_i = min(int(self.hparams["vis_i"]), len(loader.dataset))
+        if isinstance(self.hparams["vis_i"], str):
+            image = plot_from_loader(loader, self, vis_i=vis_i)
+            plt.show()
+        else:
             image = plot_from_loader_to_tensor(loader, self, vis_i=vis_i)
             self.logger.experiment.add_image(
                 "val/image", image, self.trainer.global_step
@@ -227,7 +237,7 @@ class LSTM_PL(pl.LightningModule):
         return parser
 
 
-def plot_from_loader(loader, model, vis_i=670, n=100):
+def plot_from_loader(loader, model, vis_i=670, n=1):
     dset_test = loader.dataset
     label_names = dset_test.label_names
     y_trues = []
@@ -241,7 +251,7 @@ def plot_from_loader(loader, model, vis_i=670, n=100):
         model.eval()
         with torch.no_grad():
             y_hat = model.forward(x)
-            y_hat = y_hat.cpu().numpy()
+            y_hat = y_hat.cpu().squeeze(0).numpy()
 
         dt = y_rows.iloc[0].name
 

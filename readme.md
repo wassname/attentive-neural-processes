@@ -1,29 +1,58 @@
-# Using recurrent attentive neural processes for forecasting power usage
+# Neural Processes for sequential data
 
-This repo implements ["Recurrent Attentive Neural Process for Sequential Data"](https://arxiv.org/abs/1910.09323) (ANP-RNN) and tests them on real data.
+This repo implements ["Recurrent Attentive Neural Process for Sequential Data"](https://arxiv.org/abs/1910.09323) (ANP-RNN) on a toy regression problem. And also tests it on real smart meter data.
+
+![](docs/anp-rnn_4.png)
+
+
+- [Neural Processes for sequential data](#neural-processes-for-sequential-data)
+  - [Models](#models)
+  - [Results](#results)
+  - [Example outputs](#example-outputs)
+    - [Example NP](#example-np)
+    - [Example ANP outputs (sequential)](#example-anp-outputs-sequential)
+    - [Example ANP-RNN outputs](#example-anp-rnn-outputs)
+  - [Replicating DeepMind's tensorflow ANP behaviour](#replicating-deepminds-tensorflow-anp-behaviour)
+  - [Usage](#usage)
+  - [Smartmeter Data](#smartmeter-data)
+  - [Code](#code)
+  - [See also:](#see-also)
+
+## Models
+
+- ANP-RNN ["Recurrent Attentive Neural Process for Sequential Data"](https://arxiv.org/abs/1910.09323) 
+- ANP: [Attentive Neural Processes](https://arxiv.org/abs/1901.05761)
+- NP: [Neural Processes](https://arxiv.org/abs/1807.01622)
+
+
+This implementation has lots of options so you can run it as a ANP-RNN, or ANP or NP.
+
+I've also made lots of tweaks for flexibility and stability and [replicated the DeepMind ANP results](anp_1d_regression.ipynb) in pytorch. The replication qualitatively seems like a better match than the other pytorch versions of ANP (as of 2019-11-01). You can see other code repositories in the see also section.
 
 ![](docs/np_lstm.jpeg)
 
-This implementation has lots of options so you can run it as a [Attentive Neural Process](https://arxiv.org/abs/1901.05761) (ANP), or NP.
 
-I've always made lots of tweaks for flexibility and stability and [replicated the DeepMind ANP results](anp_1d_regression.ipynb) in pytorch. The replication qualitatively seems like a better match than the other pytorch versions of ANP (as of 2019-11-01).
+## Results
 
+Results on [*Smartmeter* prediction](./smartmeters-ANP-RNN.ipynb) (lower is better)
 
+|Model|val_np_loss|val_mse_loss|
+|--|--|--|
+|**ANP-RNN_imp**|**-1.38**|.00423
+|ANP-RNN|-1.27|0.0047|
+|ANP|-1.3|0.0072|
+|NP|-1.3|0.0040|
+|LSTM| | |
 
-## Usage
+Results on [toy 1d regression](./anp-rnn_1d_regression.ipynb)  (lower is better)
 
-- clone this repository
-- see requirements.txt for requirements and version
-- Start and run the notebook [smartmeters.ipynb](https://github.com/wassname/attentive-neural-processes/blob/master/smartmeters.ipynb)
-
-## Data
-- Some data is included, you can get more from https://www.kaggle.com/jeanmidev/smart-meters-in-london/version/11
-- Inputs are: 
-  - Weather
-  - Time features: time of day, day of week, month of year, etc
-  - Bank holidays
-  - Position in sequence: days since start of window
-- Target is: mean power usage on block 0
+|model|val_loss|
+|-----|---------|
+| **ANP-RNN(impr)**| **-1.3217**|
+| ANP-RNN| -0.62|
+| ANP| -0.4228|
+| ANP(impr)| -0.3182|
+| NP|  -1.2687 |
 
 ## Example outputs
 
@@ -32,58 +61,28 @@ Here the black dots are input data, the dotted line is the true data. The blue l
 I chose a difficult example below, it's a window in the test set that deviates from the previous pattern. Given 3 days inputs, it must predict the next day, and the next day has higher power usage than previously. The trained model manages to predict it based on the inputs.
 
 
-### Example ANP-RNN outputs
+### Example NP
 
-![](docs/anp-rnn_2.png)
+Here we see underfitting, since the curve doesn't match the data
 
-![](docs/anp-rnn_3.png)
+![](docs/np_4.png)
 
-![](docs/anp-rnn_4.png)
 
 ### Example ANP outputs (sequential)
 
-![](docs/1.png)
+Here we see overfitting, but the uncertainty seems to small, and the fit could be improved
 
-![](docs/4.png)
+![](docs/anp_4.png)
 
-![](docs/7.png)
+### Example ANP-RNN outputs
 
-![](docs/12.png)****
+This has a better calibrated uncertainty and a better fit
 
-![](docs/19.png)
-
-### Example LSTM Baseline outputs
-
-Compare this to a quick LSTM baseline below, which didn't predict this divergance from the pattern. (Bear in mind that I didn't tweak this model as much). The uncertainty and prediction are also less smooth and the log probability is lower.
-
-An LSTM with an encoder style similar to ANP's:
-
-![](docs/lstm_with_context.png)
-
-and a normal LSTM:
-
-![](docs/lstm_baseline.png)
-
-## Code
-
-This is based on the code listed in the next section, with some changes. The most notable ones add stability, others are to make sure it can handle predicting into the future:
-
-Changes for a predictive use case:
-- target points are always in the future, context is in the past
-- context and targets are still sampled randomly during training
+![](docs/anp-rnn_4.png)
 
 
-Changes for stability:
-- in eval mode, take mean of latent space, and mean of output isntead of sampling
-- use log_variance where possible (there is a flag to try without this, and it seems to help)
-  - and add a minimum bound to std (in log domain) to avoid mode collapse (one path using log_var one not)
-- use log_prob loss (not mseloss or BCELoss)
-- use pytorch attention (which has dropout) instead of custom attention
-- use_deterministic option
-- use batchnorm and dropout on channel dimensions
-- check and skip nonfinite values because for extreme inputs we can still get nan's
 
-## Replicating tensorflow ANP behaviour
+## Replicating DeepMind's tensorflow ANP behaviour
 
 I put some work into replicating the behaviour shown in the [original deepmind tensorflow notebook](https://github.com/deepmind/neural-processes/blob/master/attentive_neural_process.ipynb).
 
@@ -98,6 +97,43 @@ And a ANP-RNN
 
 It's just a qualitative comparison but we see the same kind of overfitting with uncertainty being tight where lots of data points exist, and wide where they do not. However this repo seems to miss points occasionally.
 
+
+
+## Usage
+
+- clone this repository
+- see requirements.txt for requirements and version
+- Start and run the notebook [smartmeters.ipynb](smartmeters-ANP-RNN.ipynb)
+- To see a toy 1d regression problem, look at [anp-rnn_1d_regression.ipynb](anp-rnn_1d_regression.ipynb)
+
+## Smartmeter Data
+- Some data is included, you can get more from https://www.kaggle.com/jeanmidev/smart-meters-in-london/version/11
+- Inputs are: 
+  - Weather
+  - Time features: time of day, day of week, month of year, etc
+  - Bank holidays
+  - Position in sequence: days since start of window
+- Target is: mean power usage on block 0
+
+
+## Code
+
+This is based on the code listed in the next section, with some changes. The most notable ones add stability, others are to make sure it can handle predicting into the future:
+
+Changes for a sequential/predictive use case:
+- target points are always in the future, context is in the past
+- context and targets are still sampled randomly during training
+
+Changes for stability:
+- in eval mode, take mean of latent space, and mean of output isntead of sampling
+- use log_variance where possible (there is a flag to try without this, and it seems to help)
+  - and add a minimum bound to std (in log domain) to avoid mode collapse (one path using log_var one not)
+- use log_prob loss (not mseloss or BCELoss)
+- use pytorch attention (which has dropout and is faster) instead of custom attention
+- use_deterministic option, although it seems to do better with this off
+- use batchnorm and dropout on channel dimensions
+- check and skip nonfinite values because for extreme inputs we can still get nan's. Also gradient clipping
+- use pytorch lightning for early stopping, hyperparam opt, and reduce learning rate on plateau
 
 ## See also:
 
