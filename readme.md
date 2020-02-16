@@ -28,11 +28,13 @@ I've also made lots of tweaks for flexibility and stability and [replicated the 
     - [Example NP](#example-np)
     - [Example ANP outputs (sequential)](#example-anp-outputs-sequential)
     - [Example ANP-RNN outputs](#example-anp-rnn-outputs)
+    - [Example of ANP-RNN with MCDropout](#example-of-anp-rnn-with-mcdropout)
   - [Replicating DeepMind's tensorflow ANP behaviour](#replicating-deepminds-tensorflow-anp-behaviour)
   - [Using Monte Carlo Dropout](#using-monte-carlo-dropout)
   - [Usage](#usage)
   - [Smartmeter Data](#smartmeter-data)
   - [Code](#code)
+  - [ANP-RNN diagram](#anp-rnn-diagram)
   - [See also:](#see-also)
 
 
@@ -90,11 +92,10 @@ This has a better calibrated uncertainty and a better fit
 
 ![](docs/anp-rnn_4.png)
 
-A Diagram of ANP-RNN's
-
-![](docs/np_lstm.jpeg)
+### Example of ANP-RNN with MCDropout
 
 
+![](docs/anp-rnn-mcdropout.png)
 
 ## Replicating DeepMind's tensorflow ANP behaviour
 
@@ -176,6 +177,10 @@ Changes for stability:
 - use batchnorm and dropout on channel dimensions
 - check and skip nonfinite values because for extreme inputs we can still get nan's. Also gradient clipping
 - use pytorch lightning for early stopping, hyperparam opt, and reduce learning rate on plateau
+
+## ANP-RNN diagram
+
+![](docs/anp-rnn-mcdropout.png)
 
 ## See also:
 
