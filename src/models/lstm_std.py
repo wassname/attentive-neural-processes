@@ -272,7 +272,7 @@ class LSTM_PL(pl.LightningModule):
         return parser
 
 
-def plot_from_loader(loader, model, vis_i=670, n=1):
+def plot_from_loader(loader, model, vis_i=670, n=1, window_len=0):
     dset_test = loader.dataset
     label_names = dset_test.label_names
     y_trues = []
