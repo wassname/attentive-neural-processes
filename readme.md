@@ -54,11 +54,12 @@ Results on [*Smartmeter* prediction](./smartmeters-ANP-RNN.ipynb) (lower is bett
 
 |Model|val_np_loss|val_mse_loss|
 |--|--|--|
+| **ANP-RNN(impr)(MCDropout)**| **-1.48**|
 |**ANP-RNN_imp**|**-1.38**|.00423
 |ANP-RNN|-1.27|0.0047|
 |ANP|-1.3|0.0072|
 |NP|-1.3|0.0040|
-|LSTM|-0.066| 0.010 |
+|LSTM|-0.78| 0.0074 |
 
 
 ### Example LSTM baseline
@@ -132,8 +133,8 @@ The model tries to estimate the how unsure it is, but what about when it is out 
 
 |Name|val_loss (n=100) [lower is better]|
 |--|--|
-|MCDropout| -1.40|
-|Normal| -0.64|
+|MCDropout| -1.31|
+|Normal| -1.04|
 
 We can estimate additional uncertainty by using Monte Carlo Dropout to see how uncertain the model acts in the presence of dropout. This doesn't capture all uncertainty, but I found that is does improve (decrease) the validation loss. The loss is calculated by the negative overlap of the output distribution and the target value so this improvement in the loss shows that MCDropout improved the estimation of the uncertainty.
 
