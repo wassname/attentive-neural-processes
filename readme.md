@@ -58,7 +58,7 @@ Results on [*Smartmeter* prediction](./smartmeters-ANP-RNN.ipynb) (lower is bett
 |ANP-RNN|-1.27|0.0047|
 |ANP|-1.3|0.0072|
 |NP|-1.3|0.0040|
-|LSTM| | |
+|LSTM|-0.066| 0.010 |
 
 
 ### Example LSTM baseline
