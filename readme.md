@@ -14,6 +14,7 @@ This repo implements ["Recurrent Attentive Neural Process for Sequential Data"](
     - [Example ANP-RNN outputs](#example-anp-rnn-outputs)
     - [Example LSTM baseline](#example-lstm-baseline)
   - [Replicating DeepMind's tensorflow ANP behaviour](#replicating-deepminds-tensorflow-anp-behaviour)
+  - [Using Monte Carlo Dropout](#using-monte-carlo-dropout)
   - [Usage](#usage)
   - [Smartmeter Data](#smartmeter-data)
   - [Code](#code)
@@ -103,7 +104,26 @@ And a ANP-RNN
 
 It's just a qualitative comparison but we see the same kind of overfitting with uncertainty being tight where lots of data points exist, and wide where they do not. However this repo seems to miss points occasionally.
 
+## Using Monte Carlo Dropout
 
+One more experiment is included:
+
+The model tries to estimate the how unsure it is, but what about when it is out of sample? What about what it doesn't know that it doesn't know?
+
+We can estimate additional uncertainty by using Monte Carlo Dropout to see how uncertain the model acts in the presence of dropout. This doesn't capture all uncertainty, but I found that is does improve (decrease) the validation loss. The loss is calculated by the negative overlap of the output distribution and the target value so this improvement in the loss shows that MCDropout improved the estimation of the uncertainty.
+
+|Name|val_loss (n=100)|
+|--|--|
+|MCDropout| -1.40|
+|Inference| -0.64|
+
+With MCDropout:
+![](docs/anp-rnn-mcdropout.png)
+
+Without
+![](docs/anp-rnn-nodropout.png)
+
+For more details see the notebook [./smartmeters-ANP-RNN-mcdropout.ipynb](./smartmeters-ANP-RNN-mcdropout.ipynb)
 
 ## Usage
 
