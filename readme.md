@@ -120,6 +120,10 @@ The model tries to estimate the how unsure it is, but what about when it is out 
 
 We can estimate additional uncertainty by using Monte Carlo Dropout to see how uncertain the model acts in the presence of dropout. This doesn't capture all uncertainty, but I found that is does improve (decrease) the validation loss. The loss is calculated by the negative overlap of the output distribution and the target value so this improvement in the loss shows that MCDropout improved the estimation of the uncertainty.
 
+Why didn't the model just learn to be more uncertain? Well I choose a challenging train, val/test split where the val data was in the future and showed quite differen't behaviour. That means that the validation data had behaviour the model has never seen before. 
+
+![](docs/data_split.png)
+
 With MCDropout:
 
 ![](docs/anp-rnn-mcdropout.png)
