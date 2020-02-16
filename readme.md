@@ -59,7 +59,7 @@ Results on [*Smartmeter* prediction](./smartmeters-ANP-RNN.ipynb) (lower is bett
 |ANP-RNN|-1.27|0.0047|
 |ANP|-1.3|0.0072|
 |NP|-1.3|0.0040|
-|LSTM|-0.78| 0.0074 |
+|LSTM|-0.78| 0.0074  |
 
 
 ### Example LSTM baseline
@@ -202,3 +202,18 @@ A list of projects I used as reference or modified to make this one:
 - If you want to try vanilla neural processes: https://github.com/EmilienDupont/neural-processes/blob/master/example-1d.ipynb
 
 I'm very grateful for all these authors for sharing their work. It was a pleasure to dive deep into these models compare the different implementations.
+
+
+Neural process papers:
+
+- [2019, Attentive Neural Processes](https://arxiv.org/abs/1910.09323) (using attention to prevent underfitting)
+- [2019, Functional Neural Processes](https://arxiv.org/abs/1906.08324)
+- [2019, Recurrent Neural Processes](https://arxiv.org/abs/1906.05915) (2d and 3d over time)
+- [2019, Spatiotemporal Modeling using Recurrent
+Neural Processes](https://www.ri.cmu.edu/wp-content/uploads/2019/08/msr_thesis_document.pdf) (infilling spatial information, using a RNN for time information, no code)
+- [2018, Conditional Neural Processes](https://arxiv.org/abs/1807.01613) [code](https://github.com/deepmind/neural-processes)
+- [2018, Neural Processes](https://arxiv.org/abs/1807.01622)
+
+Blogposts:
+- [2018, Neural Processes as distributions over functions
+](https://kasparmartens.rbind.io/post/np/)
