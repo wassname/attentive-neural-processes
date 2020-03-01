@@ -56,7 +56,8 @@ class LatentModel(nn.Module):
                  use_rnn=True, # use RNN/LSTM?
                  use_lstm_le=False, # use another LSTM in latent encoder instead of MLP
                  use_lstm_de=False, # use another LSTM in determinstic encoder instead of MLP
-                 use_lstm_d=False, # use another lstm in decoder instead of MLP
+                 use_lstm_d=False,  # use another lstm in decoder instead of MLP
+                 context_in_target=True,
                  **kwargs,
                 ):
 
@@ -121,6 +122,7 @@ class LatentModel(nn.Module):
         )
         self._use_deterministic_path = use_deterministic_path
         self._use_lvar = use_lvar
+        self.context_in_target = context_in_target
 
     def forward(self, context_x, context_y, target_x, target_y=None):
 
@@ -152,18 +154,18 @@ class LatentModel(nn.Module):
 
             if self._use_lvar:
                 log_p = log_prob_sigma(target_y, dist.loc, log_sigma).mean(-1)  # [B, T_target, Y].mean(-1)
-                if self.hparams["context_in_target"]:
+                if self.context_in_target:
                     log_p[:, :context_x.size(1)] /= 100
                 kl_loss = kl_loss_var(dist_prior.loc, log_var_prior,
                                       dist_post.loc, log_var_post).mean(-1)  # [B, R].mean(-1)
             else:
                 log_p = dist.log_prob(target_y).mean(-1)
-                if self.hparams["context_in_target"]:
+                if self.context_in_target:
                     log_p[:, :context_x.size(1)] /= 100 # There's the temptation for it to fit only on context, where it knows the answer, and learn very low uncertainty. 
                 kl_loss = torch.distributions.kl_divergence(
                     dist_post, dist_prior).mean(-1)  # [B, R].mean(-1)
             kl_loss = kl_loss[:, None].expand(log_p.shape)
-            mse_loss = F.mse_loss(dist.loc, target_y, reduce=None)[:, :context_x.size(1)].mean()
+            mse_loss = F.mse_loss(dist.loc, target_y, reduction='none')[:, :context_x.size(1)].mean()
             loss = (kl_loss - log_p).mean()
 
         else:
@@ -173,4 +175,4 @@ class LatentModel(nn.Module):
             loss = None
 
         y_pred = dist.rsample() if self.training else dist.loc
-        return y_pred, dict(loss=loss, loss_p=loss_p.mean(), loss_kl=loss_kl, loss_mse=mse_loss.mean()), dict(log_sigma=log_sigma, dist=dist)
+        return y_pred, dict(loss=loss, loss_p=-log_p.mean(), loss_kl=kl_loss, loss_mse=mse_loss.mean()), dict(log_sigma=log_sigma, dist=dist)

@@ -25,18 +25,18 @@ class LatentModelPL(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         assert all(torch.isfinite(d).all() for d in batch)
         context_x, context_y, target_x, target_y = batch
-        y_pred, losses, extra =  = self.forward(context_x, context_y, target_x, target_y)
+        y_pred, losses, extra = self.forward(context_x, context_y, target_x, target_y)
         y_std = extra['dist'].scale
 
         tensorboard_logs = {
             "train_loss": losses['loss'],
             "train/kl": losses['loss_kl'].mean(),
-            "train/std": losses['y_std'].mean(),
+            "train/std": y_std.mean(),
             "train/mse": losses['loss_mse'].mean(),
         }
         assert torch.isfinite(loss)
         # print('device', next(self.model.parameters()).device)
-        return {"loss": loss, "log": tensorboard_logs}
+        return {"loss": losses['loss'], "log": tensorboard_logs}
 
     def validation_step(self, batch, batch_idx):
         assert all(torch.isfinite(d).all() for d in batch)
@@ -48,9 +48,9 @@ class LatentModelPL(pl.LightningModule):
             "val_loss": losses['loss'], # This exact key is needed for metrics
             "val/kl": losses['loss_kl'].mean(),
             "val/mse": losses['loss_mse'].mean(),
-            "val/std": losses['y_std'].mean(),
+            "val/std": y_std.mean(),
         }
-        return {"val_loss": loss, "log": tensorboard_logs}
+        return {"val_loss": losses['loss'], "log": tensorboard_logs}
 
     # def training_end(self, outputs):
     #     logs = self.agg_logs(outputs)
