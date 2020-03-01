@@ -23,16 +23,18 @@ def collate_fns(max_num_context, max_num_extra_target, sample, sort=True, contex
         x = torch.from_numpy(x).float()
         y = torch.from_numpy(y).float()
 
-        x[:, :max_num_context, -1] = 0  # Feature to let the model know this is past data
-        n=x[:, max_num_context:, -1].shape[1]
-        x[:, max_num_context:, -1] = torch.arange(1, n + 1) / 1.0 / n  # Feature to let the model know this is past data
+        # Last feature will show how far in time a point is from out last context
+        assert (np.diff(x[:, :, 0], 1)>=0).all(), 'first features should be ordered e.g. seconds'
+        assert (x[:, max_num_context, -1]==0.).all(), 'last features should be empty'
+        time = x[:, :, 0]
+        t0 = x[:, max_num_context, 0][:, None]
+        x[:, :, -1] = time - t0  # Feature to let the model know this is past data
         
         x_context = x[:, :max_num_context]
         y_context = y[:, :max_num_context]
     
         x_target_extra = x[:, max_num_context:]
         y_target_extra = y[:, max_num_context:]
-
         
         if sample:
 
@@ -53,9 +55,8 @@ def collate_fns(max_num_context, max_num_extra_target, sample, sort=True, contex
             x_target = x_target_extra
             y_target = y_target_extra
 
-        assert (x_context[:, :, -1]==0).all()
         assert (x[:, -1, -1] > 0).all()
-        # assert (x[:, 0, -1] == 0).all()
+        assert (x[:, 0, -1] < 0).all()
         
         return x_context, y_context, x_target, y_target
 
@@ -75,19 +76,19 @@ class SmartMeterDataSet(torch.utils.data.Dataset):
         rows = rows.sort_values('tstp')
 
         # make sure tstp, which is our x axis, is the first value
-        columns = ['tstp'] + list(set(rows.columns) - set(['tstp']))
+        columns = ['tstp'] + list(set(rows.columns) - set(['tstp'])) + ['future']
+        rows['future'] = 0.
         rows = rows[columns]
 
         # This will be the last row, and will change it upon sample to let the model know some points are in the future
-        rows['future']=1
 
-        x = rows.drop(columns=self.label_names)
-        y = rows[self.label_names]
+        x = rows.drop(columns=self.label_names).copy()
+        y = rows[self.label_names].copy()
         return x, y
 
 
     def __getitem__(self, i):
-        x,y = self.get_rows(i)
+        x, y = self.get_rows(i)
         return x.values, y.values
         
     def __len__(self):
@@ -140,7 +141,7 @@ def get_smartmeter_df(indir=Path('./data/smart-meters-in-london'), use_logy=Fals
     
     # Also find bank holidays
     df_hols = pd.read_csv(indir/'uk_bank_holidays.csv', parse_dates=[0])
-    holidays = set(df_hols['Bank holidays'].dt.round('D'))
+    holidays = set(df_hols['Bank holidays'].dt.round('D'))  
 
     df['holiday'] = df.tstp.apply(lambda dt:dt.floor('D') in holidays).astype(int)
 
@@ -158,7 +159,7 @@ def get_smartmeter_df(indir=Path('./data/smart-meters-in-london'), use_logy=Fals
     df = df.dropna()
 
     if use_logy:
-        df['energy(kWh/hh)'] = np.log(df['energy(kWh/hh)']+eps)
+        df['energy(kWh/hh)'] = np.log(df['energy(kWh/hh)']+1e-4)
     df = df.sort_values('tstp')
     
     # split data

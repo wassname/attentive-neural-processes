@@ -25,13 +25,14 @@ class LatentModelPL(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         assert all(torch.isfinite(d).all() for d in batch)
         context_x, context_y, target_x, target_y = batch
-        y_pred, kl, loss, loss_mse, y_std = self.forward(context_x, context_y, target_x, target_y)
+        y_pred, losses, extra =  = self.forward(context_x, context_y, target_x, target_y)
+        y_std = extra['dist'].scale
+
         tensorboard_logs = {
-            "train/loss": loss,
-            "train/kl": kl.mean(),
-            "train/std": y_std.mean(),
-            "train/mse": loss_mse.mean(),
-            "train/mse": F.mse_loss(y_pred, target_y).mean(),
+            "train_loss": losses['loss'],
+            "train/kl": losses['loss_kl'].mean(),
+            "train/std": losses['y_std'].mean(),
+            "train/mse": losses['loss_mse'].mean(),
         }
         assert torch.isfinite(loss)
         # print('device', next(self.model.parameters()).device)
@@ -40,45 +41,65 @@ class LatentModelPL(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         assert all(torch.isfinite(d).all() for d in batch)
         context_x, context_y, target_x, target_y = batch
-        y_pred, kl, loss, loss_mse, y_std = self.forward(context_x, context_y, target_x, target_y)
+        y_pred, losses, extra = self.forward(context_x, context_y, target_x, target_y)
+        y_std = extra['dist'].scale
         
         tensorboard_logs = {
-            "val_loss": loss,
-            "val/kl": kl.mean(),
-            "val/mse": loss_mse.mean(),
-            "val/std": y_std.mean(),
-            "val/mse": F.mse_loss(y_pred, target_y).mean(),
+            "val_loss": losses['loss'], # This exact key is needed for metrics
+            "val/kl": losses['loss_kl'].mean(),
+            "val/mse": losses['loss_mse'].mean(),
+            "val/std": losses['y_std'].mean(),
         }
         return {"val_loss": loss, "log": tensorboard_logs}
 
+    # def training_end(self, outputs):
+    #     logs = self.agg_logs(outputs)
+    #     tensorboard_logs_str = {k: f'{v}' for k, v in logs["log"].items()}
+    #     print(f"step train {self.trainer.global_step}, {tensorboard_logs_str}")
+    #     return logs
+
     def validation_end(self, outputs):
         if int(self.hparams["vis_i"]) > 0:
-            # https://github.com/PytorchLightning/pytorch-lightning/blob/f8d9f8f/pytorch_lightning/core/lightning.py#L293
-            loader = self.val_dataloader()[0]
-            vis_i = min(int(self.hparams["vis_i"]), len(loader.dataset))
-            # print('vis_i', vis_i)
-            if isinstance(self.hparams["vis_i"], str):
-                image = plot_from_loader(loader, self, i=int(vis_i))
-                plt.show()
+            self.show_image()
+        logs = self.agg_logs(outputs)
+        tensorboard_logs_str = {k: f'{v}' for k, v in logs["log"].items()}
+        print(f"step val {self.trainer.global_step}, {tensorboard_logs_str}")
+        return logs
+
+    def show_image(self):        
+        # https://github.com/PytorchLightning/pytorch-lightning/blob/f8d9f8f/pytorch_lightning/core/lightning.py#L293
+        loader = self.val_dataloader()[0]
+        vis_i = min(int(self.hparams["vis_i"]), len(loader.dataset))
+        # print('vis_i', vis_i)
+        if isinstance(self.hparams["vis_i"], str):
+            image = plot_from_loader(loader, self, i=int(vis_i))
+            plt.show()
+        else:
+            image = plot_from_loader_to_tensor(loader, self, i=vis_i)
+            self.logger.experiment.add_image('val/image', image, self.trainer.global_step)
+
+    def agg_logs(self, outputs):
+        if isinstance(outputs, dict):
+            outputs = [outputs]
+        aggs = {}
+        for j in outputs[0]:
+            if isinstance(outputs[0][j], dict):
+                # Take mean of sub dicts
+                keys = outputs[0][j].keys()
+                aggs[j] = {k: torch.stack([x[j][k] for x in outputs if k in x[j]]).mean() for k in keys}
             else:
-                image = plot_from_loader_to_tensor(loader, self, i=vis_i)
-                self.logger.experiment.add_image('val/image', image, self.trainer.global_step)
-        
-        keys = outputs[0]["log"].keys()
-        # tensorboard_logs = {}
-        # for k in keys:
-        #     tensorboard_logs[k] = torch.stack([x["log"][k] for x in outputs if k in x["log"]]).mean()
-        tensorboard_logs = {k: torch.stack([x["log"][k] for x in outputs if k in x["log"]]).mean() for k in keys}
+                # Take mean of numbers
+                aggs[j] = torch.stack([x[j] for x in outputs if j in x]).mean()
+        return aggs
 
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
-        assert torch.isfinite(avg_loss)
-        tensorboard_logs_str = {k: f'{v}' for k, v in tensorboard_logs.items()}
-        print(f"step {self.trainer.global_step}, {tensorboard_logs_str}")
-
-        # Log hparams with metric, doesn't work
-        # self.logger.experiment.add_hparams(self.hparams.__dict__, {"avg_val_loss": avg_loss})
-
-        return {"avg_val_loss": avg_loss, "log": tensorboard_logs}
+        # # Log hparams with metric, doesn't work
+        # # self.logger.experiment.add_hparams(self.hparams.__dict__, {"avg_val_loss": avg_loss})
+        # if f"{name}_loss" in outputs[0].keys():
+        #     avg_loss = torch.stack([x[f"{name}_loss"] for x in outputs]).mean()
+        #     assert torch.isfinite(avg_loss)
+        # else:
+        #     avg_loss = 0
+        # return {f"avg_{name}_loss": avg_loss, "log": tensorboard_logs, "progress_bar": {}}
 
     def test_step(self, *args, **kwargs):
         return self.validation_step(*args, **kwargs)
@@ -87,8 +108,8 @@ class LatentModelPL(pl.LightningModule):
         return self.validation_end(*args, **kwargs)
 
     def configure_optimizers(self):
-        optim = torch.optim.AdamW(self.parameters(), lr=self.hparams["learning_rate"])
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, patience=2, verbose=True, min_lr=1e-5) # note early stopping has patient 3
+        optim = torch.optim.Adam(self.parameters(), lr=self.hparams["learning_rate"], weight_decay=0)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, patience=1, verbose=True, min_lr=1e-7)  # note early stopping has patience 3
         return [optim], [scheduler]
 
     def _get_cache_dfs(self):

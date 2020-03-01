@@ -20,6 +20,8 @@ This repository has lots of options so you can run it as a ANP-RNN, or ANP or NP
 
 I've also made lots of tweaks for flexibility and stability and [replicated the DeepMind ANP results](anp_1d_regression.ipynb) in pytorch. The replication qualitatively seems like a better match than the other pytorch versions of ANP (as of 2019-11-01). You can see other code repositories in the see also section.
 
+It's not heavily documented, because most of my code never gets read or used. If you are using it, and it's confusing, make a github issue are we will add comments or docs together.
+
 
 - [Neural Processes for sequential data](#neural-processes-for-sequential-data)
   - [Experiment: Comparing models on real world data](#experiment-comparing-models-on-real-world-data)
@@ -37,7 +39,9 @@ I've also made lots of tweaks for flexibility and stability and [replicated the 
     - [Smartmeter Data](#smartmeter-data)
     - [Code](#code)
   - [ANP-RNN diagram](#anp-rnn-diagram)
+  - [Tips](#tips)
   - [See also:](#see-also)
+- [Citing](#citing)
 
 
 ## Experiment: Comparing models on real world data
@@ -192,6 +196,19 @@ Changes for stability:
 
 ![](docs/anp-rnn-mcdropout.png)
 
+## Tips
+
+- Make you normalise all data, ideally the output two, this seems to be very important
+- Batchnorm, lvar, dropout: it's unclear to me how to make these help reliably
+- The deterministic path had unclear value, I found it best to leave it out
+- The size and comparitive size of the context and target is important for performance.
+  - If the context is too long and complex the model cannot summarize it
+  - If the target is too long and complex hte model cannot fit it well
+  - If the context is in the target, the model may collapse to just fitting this. To fix
+    - make it small
+    - or make the loss on this part downweighted, this seems like the best approach since x_context->y_context may still be a usefull secondary task
+    - or do not include context in target
+
 ## See also:
 
 A list of projects I used as reference or modified to make this one:
@@ -206,14 +223,20 @@ I'm very grateful for all these authors for sharing their work. It was a pleasur
 
 Neural process papers:
 
-- [2019, Attentive Neural Processes](https://arxiv.org/abs/1910.09323) (using attention to prevent underfitting)
-- [2019, Functional Neural Processes](https://arxiv.org/abs/1906.08324)
-- [2019, Recurrent Neural Processes](https://arxiv.org/abs/1906.05915) (2d and 3d over time)
-- [2019, Spatiotemporal Modeling using Recurrent
-Neural Processes](https://www.ri.cmu.edu/wp-content/uploads/2019/08/msr_thesis_document.pdf) (infilling spatial information, using a RNN for time information, no code)
-- [2018, Conditional Neural Processes](https://arxiv.org/abs/1807.01613) [code](https://github.com/deepmind/neural-processes)
-- [2018, Neural Processes](https://arxiv.org/abs/1807.01622)
+- [2019-10-17, "Recurrent Attentive Neural Process for Sequential Data"](https://arxiv.org/abs/1910.09323) - LSTM on X before encoder, no code
+- [2019-10-29, "Convolutional Conditional Neural Processes"](https://arxiv.org/abs/1910.13556). [code](https://github.com/cambridge-mlg/convcnp)
+- [2019-10-01, "Wasserstein Neural Processes"](https://arxiv.org/abs/1910.00668) would be helpfull if the output dist never converges for your problem
+- [2019-08-08, "Spatiotemporal Modeling using Recurrent Neural Processes"](https://www.ri.cmu.edu/wp-content/uploads/2019/08/msr_thesis_document.pdf) (infilling spatial information, using a RNN for time information, no code)
+- [2019-06-13, "Recurrent Neural Processes"](https://arxiv.org/abs/1906.05915) (2d and 3d over time, using LSTM in encoder/decoder, no code)
+- [2019-06-19, "The Functional Neural Processes"](https://arxiv.org/abs/1906.08324)
+- [2019-01-17, "Attentive Neural Processes"](https://arxiv.org/abs/1901.05761) (using attention to prevent underfitting) [code](https://github.com/deepmind/neural-processes)
+- [2018-07-04, "Conditional Neural Processes"](https://arxiv.org/abs/1807.01613) [code](https://github.com/deepmind/neural-processes)
+- [2018-07-04, "Neural Processes"](https://arxiv.org/abs/1807.01622)
 
 Blogposts:
-- [2018, Neural Processes as distributions over functions
+- [2018-08-10, "Neural Processes as distributions over functions"
 ](https://kasparmartens.rbind.io/post/np/)
+
+# Citing 
+
+If you like our work and end up using this code for your reseach give us a shout-out by citing or acknowledging

@@ -6,6 +6,24 @@ import numpy as np
 # from .attention import Attention as PtAttention
 
 
+class LSTMBlock(nn.Module):
+    def __init__(
+        self, in_channels, out_channels, dropout=0, batchnorm=False, bias=False, num_layers=1
+    ):
+        super().__init__()
+        self._lstm = nn.LSTM(
+                input_size=in_channels,
+                hidden_size=out_channels,
+                num_layers=num_layers,
+                dropout=dropout,
+                batch_first=True,
+                bias=bias
+        )
+
+    def forward(self, x):
+        return self._lstm(x)[0]
+
+
 class NPBlockRelu2d(nn.Module):
     """Block for Neural Processes."""
 
@@ -208,17 +226,14 @@ class LatentEncoder(nn.Module):
         use_lvar=False,
         use_self_attn=False,
         attention_layers=2,
+        use_lstm=False
     ):
         super().__init__()
-        self._input_layer = nn.Linear(input_dim, hidden_dim)
-        self._encoder = nn.ModuleList(
-            [
-                NPBlockRelu2d(
-                    hidden_dim, hidden_dim, batchnorm=batchnorm, dropout=dropout
-                )
-                for _ in range(n_encoder_layers)
-            ]
-        )
+        # self._input_layer = nn.Linear(input_dim, hidden_dim)
+        if use_lstm:
+            self._encoder = LSTMBlock(input_dim, hidden_dim, batchnorm=batchnorm, dropout=dropout, num_layers=n_encoder_layers)
+        else:
+            self._encoder = BatchMLP(input_dim, hidden_dim, batchnorm=batchnorm, dropout=dropout, num_layers=n_encoder_layers)
         if use_self_attn:
             self._self_attention = Attention(
                 hidden_dim,
@@ -232,15 +247,14 @@ class LatentEncoder(nn.Module):
         self._log_var = nn.Linear(hidden_dim, latent_dim)
         self._min_std = min_std
         self._use_lvar = use_lvar
+        self._use_lstm = use_lstm
         self._use_self_attn = use_self_attn
 
     def forward(self, x, y):
         encoder_input = torch.cat([x, y], dim=-1)
 
         # Pass final axis through MLP
-        encoded = self._input_layer(encoder_input)
-        for layer in self._encoder:
-            encoded = torch.relu(layer(encoded))
+        encoded = self._encoder(encoder_input)
 
         # Aggregator: take the mean over all points
         if self._use_self_attn:
@@ -282,21 +296,15 @@ class DeterministicEncoder(nn.Module):
         batchnorm=False,
         dropout=0,
         attention_dropout=0,
+        use_lstm=False,
     ):
         super().__init__()
         self._use_self_attn = use_self_attn
-        self._input_layer = nn.Linear(input_dim, hidden_dim)
-        self._d_encoder = nn.ModuleList(
-            [
-                NPBlockRelu2d(
-                    hidden_dim,
-                    hidden_dim,
-                    batchnorm=batchnorm,
-                    dropout=attention_dropout,
-                )
-                for _ in range(n_d_encoder_layers)
-            ]
-        )
+        # self._input_layer = nn.Linear(input_dim, hidden_dim)
+        if use_lstm:
+            self._d_encoder = LSTMBlock(input_dim, hidden_dim, batchnorm=batchnorm, dropout=dropout, num_layers=n_d_encoder_layers)
+        else:
+            self._d_encoder = BatchMLP(input_dim, hidden_dim, batchnorm=batchnorm, dropout=dropout, num_layers=n_d_encoder_layers)
         if use_self_attn:
             self._self_attention = Attention(
                 hidden_dim,
@@ -317,14 +325,12 @@ class DeterministicEncoder(nn.Module):
         d_encoder_input = torch.cat([context_x, context_y], dim=-1)
 
         # Pass final axis through MLP
-        d_encoded = self._input_layer(d_encoder_input)
-        for layer in self._d_encoder:
-            d_encoded = torch.relu(layer(d_encoded))
+        d_encoded = self._d_encoder(d_encoder_input)
 
         if self._use_self_attn:
             d_encoded = self._self_attention(d_encoded, d_encoded, d_encoded)
 
-        # Apply attention
+        # Apply attention as mean aggregation
         h = self._cross_attention(context_x, d_encoded, target_x)
 
         return h
@@ -343,6 +349,7 @@ class Decoder(nn.Module):
         use_lvar=False,
         batchnorm=False,
         dropout=0,
+        use_lstm=False,
     ):
         super(Decoder, self).__init__()
         self._target_transform = nn.Linear(x_dim, hidden_dim)
@@ -350,14 +357,11 @@ class Decoder(nn.Module):
             hidden_dim_2 = 2 * hidden_dim + latent_dim
         else:
             hidden_dim_2 = hidden_dim + latent_dim
-        self._decoder = nn.ModuleList(
-            [
-                NPBlockRelu2d(
-                    hidden_dim_2, hidden_dim_2, batchnorm=batchnorm, dropout=dropout
-                )
-                for _ in range(n_decoder_layers)
-            ]
-        )
+            
+        if use_lstm:
+            self._decoder = LSTMBlock(hidden_dim_2, hidden_dim_2, batchnorm=batchnorm, dropout=dropout, num_layers=n_decoder_layers)
+        else:
+            self._decoder = BatchMLP(hidden_dim_2, hidden_dim_2, batchnorm=batchnorm, dropout=dropout, num_layers=n_decoder_layers)
         self._mean = nn.Linear(hidden_dim_2, y_dim)
         self._std = nn.Linear(hidden_dim_2, y_dim)
         self._use_deterministic_path = use_deterministic_path
@@ -371,19 +375,17 @@ class Decoder(nn.Module):
         if self._use_deterministic_path:
             z = torch.cat([r, z], dim=-1)
 
-        representation = torch.cat([z, x], dim=-1)
+        r = torch.cat([z, x], dim=-1)
 
-        # Pass final axis through MLP
-        for layer in self._decoder:
-            representation = torch.relu(layer(representation))
+        r = self._decoder(r)
 
         # Get the mean and the variance
-        mean = self._mean(representation)
-        log_sigma = self._std(representation)
+        mean = self._mean(r)
+        log_sigma = self._std(r)
 
         # Bound or clamp the variance
         if self._use_lvar:
-            log_sigma = torch.clamp(log_sigma, math.log(self._min_std), -math.log(1e-5))
+            log_sigma = torch.clamp(log_sigma, math.log(self._min_std), -math.log(self._min_std))
             sigma = torch.exp(log_sigma)
         else:
             sigma = self._min_std + (1 - self._min_std) * F.softplus(log_sigma)

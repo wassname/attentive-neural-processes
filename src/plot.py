@@ -13,8 +13,10 @@ eps = 1e-5
 
 
 def plot_rows(
-    target_y_rows: pd.DataFrame,
+    x_context_rows: pd.DataFrame,
+    x_target_rows: pd.DataFrame,
     context_y_rows: pd.DataFrame,
+    target_y_rows: pd.DataFrame,
     pred_y: np.array,
     std: np.array,
     undo_log=False,
@@ -23,8 +25,10 @@ def plot_rows(
     """Plots the predicted mean and variance and the context points.
   
   Args: 
-    target_y_rows
+    x_context_rows
+    x_target_rows
     context_y_rows: dataframe with datetime index, and labels
+    target_y_rows:    
     pred_y: An array of shape [B,num_targets,1] that contains the
         predicted means of the y values at the target points in target_x.
     std: An array of shape [B,num_targets,1] that contains the
@@ -37,6 +41,8 @@ def plot_rows(
     # Plot everything
     j = 0
     label = "energy(kWh/hh)"
+
+    # Plot input data
 
     # Start with true data and use it to get ylimits (that way they are constant)
     plt.plot(target_y_rows.index, target_y_rows.values, "k:", linewidth=2, label="true")
@@ -97,6 +103,8 @@ def plot_from_loader(
     max_num_context = context_x.shape[1]
     y_context_rows = y_rows[:max_num_context]
     y_target_extra_rows = y_rows[max_num_context:]
+    x_context_rows = x_rows[:max_num_context]
+    x_target_extra_rows = x_rows[max_num_context:]
     dt = y_target_extra_rows.index[0]
 
     # # for the plotting we are doing to run prediction on the context points too
@@ -104,17 +112,23 @@ def plot_from_loader(
         target_x = torch.cat([context_x, target_x_extra], 1)
         target_y = torch.cat([context_y, target_y_extra], 1)
     y_target_rows = y_rows
+    x_target_rows = x_rows
 
     model.eval()
     with torch.no_grad():
-        y_pred, kl, loss_test, loss_mse, y_std = model(context_x, context_y, target_x, target_y)
+        y_pred, losses, extra = model(context_x, context_y, target_x, target_y)
+        loss_test = losses["loss"] if "loss" in losses else 0.
+        
+        y_std = extra["dist"].scale
 
         if plot:
             plt.figure()
             plt.title(title + f" loss={loss_test: 2.2g} {dt}")
             plot_rows(
-                y_target_rows,
+                x_context_rows,
+                x_target_rows,
                 y_context_rows,
+                y_target_rows,
                 y_pred.detach().cpu().numpy(),
                 y_std.detach().cpu().numpy(),
                 undo_log=False,

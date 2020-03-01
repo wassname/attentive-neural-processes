@@ -35,25 +35,28 @@ def kl_loss_var(prior_mu, log_var_prior, post_mu, log_var_post):
 
 class LatentModel(nn.Module):
     def __init__(self,
-                 x_dim,
-                 y_dim,
-                 hidden_dim=32,
-                 latent_dim=32,
-                 latent_enc_self_attn_type="dot",
-                 det_enc_self_attn_type="dot",
-                 det_enc_cross_attn_type="dot",
-                 n_latent_encoder_layers=3,
-                 n_det_encoder_layers=3,
-                 n_decoder_layers=3,
-                 use_deterministic_path=True,
-                 min_std=0.01,
+                 x_dim, # features in input
+                 y_dim, # number of features in output
+                 hidden_dim=32, # size of hidden space
+                 latent_dim=32, # size of latent space
+                 latent_enc_self_attn_type="ptmultihead", # type of attention: "uniform", "dot", "multihead" "ptmultihead": see attentive neural processes paper
+                 det_enc_self_attn_type="ptmultihead",
+                 det_enc_cross_attn_type="ptmultihead",
+                 n_latent_encoder_layers=2,
+                 n_det_encoder_layers=2, # number of deterministic encoder layers
+                 n_decoder_layers=2,
+                 use_deterministic_path=False,
+                 min_std=0.01, # To avoid collapse use a minimum standard deviation, should be much smaller than variation in labels
                  dropout=0,
                  use_self_attn=False,
                  attention_dropout=0,
                  batchnorm=False,
-                 use_lvar=False,
-                 attention_layers=2,
-                 use_rnn=False,
+                 use_lvar=False, # Alternative loss calculation, may be more stable
+                 attention_layers=2, 
+                 use_rnn=True, # use RNN/LSTM?
+                 use_lstm_le=False, # use another LSTM in latent encoder instead of MLP
+                 use_lstm_de=False, # use another LSTM in determinstic encoder instead of MLP
+                 use_lstm_d=False, # use another lstm in decoder instead of MLP
                  **kwargs,
                 ):
 
@@ -84,6 +87,7 @@ class LatentModel(nn.Module):
             batchnorm=batchnorm,
             min_std=min_std,
             use_lvar=use_lvar,
+            use_lstm=use_lstm_le,
         )
 
         self._deterministic_encoder = DeterministicEncoder(
@@ -98,6 +102,7 @@ class LatentModel(nn.Module):
             dropout=dropout,
             batchnorm=batchnorm,
             attention_dropout=attention_dropout,
+            use_lstm=use_lstm_de,
         )
 
         self._decoder = Decoder(
@@ -111,37 +116,34 @@ class LatentModel(nn.Module):
             use_lvar=use_lvar,
             n_decoder_layers=n_decoder_layers,
             use_deterministic_path=use_deterministic_path,
+            use_lstm=use_lstm_d,
             
         )
         self._use_deterministic_path = use_deterministic_path
         self._use_lvar = use_lvar
 
     def forward(self, context_x, context_y, target_x, target_y=None):
-        num_targets = target_x.size(1)
 
         if self._use_rnn:
             # see https://arxiv.org/abs/1910.09323 where x is substituted with h = RNN(x)
             # x need to be provided as [B, T, H]
-            x = torch.cat([context_x, target_x], dim=1)
-            # h: [B, T, num_direction * H]
-            h, _ = self._lstm(x)
-            context_x = h[:, :context_x.shape[1], :]
-            target_x = h[:, context_x.shape[1]:, :]
+            target_x, _ = self._lstm(target_x)
+            context_x, _ = self._lstm(context_x)
 
         dist_prior, log_var_prior = self._latent_encoder(context_x, context_y)
 
         if target_y is not None:
-            dist_post, log_var_post = self._latent_encoder(target_x,
-                                                             target_y)
+            dist_post, log_var_post = self._latent_encoder(target_x, target_y)
             z = dist_post.loc
         else:
             z = dist_prior.loc
 
+        num_targets = target_x.size(1)
         z = z.unsqueeze(1).repeat(1, num_targets, 1)  # [B, T_target, H]
 
         if self._use_deterministic_path:
             r = self._deterministic_encoder(context_x, context_y,
-                                            target_x)  # [B, T_target, H]
+                                            target_x)  # [B, T_target, H]  
         else:
             r = None
 
@@ -150,14 +152,18 @@ class LatentModel(nn.Module):
 
             if self._use_lvar:
                 log_p = log_prob_sigma(target_y, dist.loc, log_sigma).mean(-1)  # [B, T_target, Y].mean(-1)
+                if self.hparams["context_in_target"]:
+                    log_p[:, :context_x.size(1)] /= 100
                 kl_loss = kl_loss_var(dist_prior.loc, log_var_prior,
                                       dist_post.loc, log_var_post).mean(-1)  # [B, R].mean(-1)
             else:
                 log_p = dist.log_prob(target_y).mean(-1)
+                if self.hparams["context_in_target"]:
+                    log_p[:, :context_x.size(1)] /= 100 # There's the temptation for it to fit only on context, where it knows the answer, and learn very low uncertainty. 
                 kl_loss = torch.distributions.kl_divergence(
-                    dist_post, dist_prior).mean(-1)
+                    dist_post, dist_prior).mean(-1)  # [B, R].mean(-1)
             kl_loss = kl_loss[:, None].expand(log_p.shape)
-            mse_loss = F.mse_loss(dist.loc, target_y)
+            mse_loss = F.mse_loss(dist.loc, target_y, reduce=None)[:, :context_x.size(1)].mean()
             loss = (kl_loss - log_p).mean()
 
         else:
@@ -167,4 +173,4 @@ class LatentModel(nn.Module):
             loss = None
 
         y_pred = dist.rsample() if self.training else dist.loc
-        return y_pred, kl_loss, loss, mse_loss, dist.scale
+        return y_pred, dict(loss=loss, loss_p=loss_p.mean(), loss_kl=loss_kl, loss_mse=mse_loss.mean()), dict(log_sigma=log_sigma, dist=dist)
