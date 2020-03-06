@@ -206,14 +206,26 @@ I'm very grateful for all these authors for sharing their work. It was a pleasur
 
 Neural process papers:
 
-- [2019, Attentive Neural Processes](https://arxiv.org/abs/1910.09323) (using attention to prevent underfitting)
-- [2019, Functional Neural Processes](https://arxiv.org/abs/1906.08324)
-- [2019, Recurrent Neural Processes](https://arxiv.org/abs/1906.05915) (2d and 3d over time)
-- [2019, Spatiotemporal Modeling using Recurrent
-Neural Processes](https://www.ri.cmu.edu/wp-content/uploads/2019/08/msr_thesis_document.pdf) (infilling spatial information, using a RNN for time information, no code)
-- [2018, Conditional Neural Processes](https://arxiv.org/abs/1807.01613) [code](https://github.com/deepmind/neural-processes)
-- [2018, Neural Processes](https://arxiv.org/abs/1807.01622)
+
+Neural process papers:
+
+- [2019-12-12, "Probing Uncertainty Estimates of Neural Processes"](http://bayesiandeeplearning.org/2019/papers/125.pdf)
+- [2019-10-17, "Recurrent Attentive Neural Process for Sequential Data"](https://arxiv.org/abs/1910.09323) - LSTM on X before encoder, no code
+- [2019-10-29, "Convolutional Conditional Neural Processes"](https://arxiv.org/abs/1910.13556). [code](https://github.com/cambridge-mlg/convcnp)
+- [2019-10-01, "Wasserstein Neural Processes"](https://arxiv.org/abs/1910.00668) would be helpfull if the output dist never converges for your problem
+- [2019-08-08, "Spatiotemporal Modeling using Recurrent Neural Processes"](https://www.ri.cmu.edu/wp-content/uploads/2019/08/msr_thesis_document.pdf) (infilling spatial information, using a RNN for time information, no code)
+- [2019-06-13, "Recurrent Neural Processes"](https://arxiv.org/abs/1906.05915) (2d and 3d over time, using LSTM in encoder/decoder, no code)
+- [2019-06-19, "The Functional Neural Processes"](https://arxiv.org/abs/1906.08324)
+- [2018-12-03, "Empirical Evaluation of Neural Process Objectives"](http://bayesiandeeplearning.org/2018/papers/92.pdf)
+- [2019-01-17, "Attentive Neural Processes"](https://arxiv.org/abs/1901.05761) (using attention to prevent underfitting) [code](https://github.com/deepmind/neural-processes)
+- [2018-07-04, "Conditional Neural Processes"](https://arxiv.org/abs/1807.01613) [code](https://github.com/deepmind/neural-processes)
+- [2019-06-24, "Sequential Neural Processes"](https://arxiv.org/abs/1906.10264) [code](https://github.com/singhgautam/snp) modelling a 1 or 2d process evolving over time
+- [2018-07-04, "Neural Processes"](https://arxiv.org/abs/1807.01622)
 
 Blogposts:
-- [2018, Neural Processes as distributions over functions
+- [2018-08-10, "Neural Processes as distributions over functions"
 ](https://kasparmartens.rbind.io/post/np/)
+
+# Citing 
+
+If you like our work and end up using this code for your reseach give us a shout-out by citing or acknowledging
