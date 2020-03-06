@@ -192,6 +192,23 @@ Changes for stability:
 
 ![](docs/anp-rnn-mcdropout.png)
 
+## Tips
+
+- Make you normalise all data, ideally the output two, this seems to be very important
+- Batchnorm, lvar, dropout: these seem ok but it's unclear to me how to make these help reliably. Attention dropout or lstm dropout can be especially unreliable.
+- sometimes you need quite a large hidden space to model a process. Making the network deep seems to stop it learning effectivly. It would be helpfull to try differen't activations, initializations and make sure the gradient flows effectivly to deeper networks,
+- The deterministic path had unclear value, I found it best to leave it out
+- The absolute size and comparitive size of the context and target is important for performance.
+  - If the context is too long and complex the model cannot summarize it
+  - If the target is too long and complex the model cannot fit it well
+  - If the context is in the target, the model may collapse to just fitting this. To fix
+    - make it small
+    - or make the loss on this part downweighted, this seems like the best approach since x_context->y_context may still be a usefull secondary task
+    - or do not include context in target
+  - however including the target in the context may sometimes be helpfull
+- This repo compares models, but the biggest difference in this situation would be from additional data sources, but that is outside the scope of these experiments
+
+
 ## See also:
 
 A list of projects I used as reference or modified to make this one:
@@ -202,10 +219,6 @@ A list of projects I used as reference or modified to make this one:
 - If you want to try vanilla neural processes: https://github.com/EmilienDupont/neural-processes/blob/master/example-1d.ipynb
 
 I'm very grateful for all these authors for sharing their work. It was a pleasure to dive deep into these models compare the different implementations.
-
-
-Neural process papers:
-
 
 Neural process papers:
 
