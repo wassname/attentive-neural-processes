@@ -48,7 +48,7 @@ def collate_fns(max_num_context, max_num_extra_target, sample, sort=True, contex
             )
 
         # do we want to compute loss over context+target_extra, or focus in on only target_extra?
-        if context_in_target:
+        if context_in_target is True:
             x_target = torch.cat([x_context, x_target_extra], 1)
             y_target = torch.cat([y_context, y_target_extra], 1)
         else:

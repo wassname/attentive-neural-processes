@@ -1,3 +1,46 @@
+from pytorch_lightning.callbacks import EarlyStopping
+from optuna.integration.pytorch_lightning import _check_pytorch_lightning_availability
+
+class PyTorchLightningPruningCallback(EarlyStopping):
+    """Optuna PyTorch Lightning callback to prune unpromising trials.
+    Example:
+        Add a pruning callback which observes validation accuracy.
+        .. code::
+            trainer.pytorch_lightning.Trainer(
+                early_stop_callback=PyTorchLightningPruningCallback(trial, monitor='avg_val_acc'))
+    Args:
+        trial:
+            A :class:`~optuna.trial.Trial` corresponding to the current evaluation of the
+            objective function.
+        monitor:
+            An evaluation metric for pruning, e.g., ``val_loss`` or
+            ``val_acc``. The metrics are obtained from the returned dictionaries from e.g.
+            ``pytorch_lightning.LightningModule.training_step`` or
+            ``pytorch_lightning.LightningModule.validation_end`` and the names thus depend on
+            how this dictionary is formatted.
+    """
+
+    def __init__(self, trial, monitor):
+        # type: (optuna.trial.Trial, str) -> None
+
+        super(PyTorchLightningPruningCallback, self).__init__(monitor)
+
+        _check_pytorch_lightning_availability()
+
+        self._trial = trial
+        self._monitor = monitor
+
+    def on_epoch_end(self, trainer, pl_module):
+        epoch = trainer.current_epoch
+        logs = trainer.callback_metrics or {}
+        current_score = logs.get(self._monitor)
+        if current_score is None:
+            return
+        self._trial.report(current_score, step=epoch)
+        if self._trial.should_prune():
+            message = "Trial was pruned at epoch {}.".format(epoch)
+            raise optuna.exceptions.TrialPruned(message)
+
 class ObjectDict(dict):
     """
     Interface similar to an argparser
@@ -18,3 +61,5 @@ class ObjectDict(dict):
     @property
     def __dict__(self):
         return dict(self)
+
+

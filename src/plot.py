@@ -107,12 +107,14 @@ def plot_from_loader(
     x_target_extra_rows = x_rows[max_num_context:]
     dt = y_target_extra_rows.index[0]
 
-    # # for the plotting we are doing to run prediction on the context points too
-    if not context_in_target:
-        target_x = torch.cat([context_x, target_x_extra], 1)
-        target_y = torch.cat([context_y, target_y_extra], 1)
-    y_target_rows = y_rows
-    x_target_rows = x_rows
+    if context_in_target:
+        y_target_rows = y_rows
+        x_target_rows = x_rows
+    else:
+        y_target_rows = y_target_extra_rows
+        x_target_rows = x_target_extra_rows
+    #     target_x = torch.cat([context_x, target_x_extra], 1)
+    #     target_y = torch.cat([context_y, target_y_extra], 1)
 
     model.eval()
     with torch.no_grad():
