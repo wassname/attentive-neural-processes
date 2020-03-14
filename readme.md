@@ -41,6 +41,8 @@ It's not heavily documented, because most of my code never gets read or used. If
   - [ANP-RNN diagram](#anp-rnn-diagram)
   - [Tips](#tips)
   - [See also:](#see-also)
+- [<<<<<<< HEAD](#head)
+- [- 2018-07-04, "Conditional Neural Processes" [code](https://github.com/deepmind/neural-processes)](#ul-li2018-07-04-%22conditional-neural-processes%22-codeli-ul)
 - [Citing](#citing)
 
 
@@ -199,15 +201,19 @@ Changes for stability:
 ## Tips
 
 - Make you normalise all data, ideally the output two, this seems to be very important
-- Batchnorm, lvar, dropout: it's unclear to me how to make these help reliably
+- Batchnorm, lvar, dropout: these seem ok but it's unclear to me how to make these help reliably. Attention dropout or lstm dropout can be especially unreliable.
+- sometimes you need quite a large hidden space to model a process. Making the network deep seems to stop it learning effectivly. It would be helpfull to try differen't activations, initializations and make sure the gradient flows effectivly to deeper networks,
 - The deterministic path had unclear value, I found it best to leave it out
-- The size and comparitive size of the context and target is important for performance.
+- The absolute size and comparitive size of the context and target is important for performance.
   - If the context is too long and complex the model cannot summarize it
-  - If the target is too long and complex hte model cannot fit it well
+  - If the target is too long and complex the model cannot fit it well
   - If the context is in the target, the model may collapse to just fitting this. To fix
     - make it small
     - or make the loss on this part downweighted, this seems like the best approach since x_context->y_context may still be a usefull secondary task
     - or do not include context in target
+  - however including the target in the context may sometimes be helpfull
+- This repo compares models, but the biggest difference in this situation would be from additional data sources, but that is outside the scope of these experiments
+
 
 ## See also:
 
@@ -220,17 +226,27 @@ A list of projects I used as reference or modified to make this one:
 
 I'm very grateful for all these authors for sharing their work. It was a pleasure to dive deep into these models compare the different implementations.
 
-
 Neural process papers:
 
+<<<<<<< HEAD
+=======
+- [2019-12-12, "Probing Uncertainty Estimates of Neural Processes"](http://bayesiandeeplearning.org/2019/papers/125.pdf)
+>>>>>>> e2e96cfe857561e5b3d53d24927c9dbaf655ae42
 - [2019-10-17, "Recurrent Attentive Neural Process for Sequential Data"](https://arxiv.org/abs/1910.09323) - LSTM on X before encoder, no code
 - [2019-10-29, "Convolutional Conditional Neural Processes"](https://arxiv.org/abs/1910.13556). [code](https://github.com/cambridge-mlg/convcnp)
 - [2019-10-01, "Wasserstein Neural Processes"](https://arxiv.org/abs/1910.00668) would be helpfull if the output dist never converges for your problem
 - [2019-08-08, "Spatiotemporal Modeling using Recurrent Neural Processes"](https://www.ri.cmu.edu/wp-content/uploads/2019/08/msr_thesis_document.pdf) (infilling spatial information, using a RNN for time information, no code)
 - [2019-06-13, "Recurrent Neural Processes"](https://arxiv.org/abs/1906.05915) (2d and 3d over time, using LSTM in encoder/decoder, no code)
 - [2019-06-19, "The Functional Neural Processes"](https://arxiv.org/abs/1906.08324)
+<<<<<<< HEAD
 - [2019-01-17, "Attentive Neural Processes"](https://arxiv.org/abs/1901.05761) (using attention to prevent underfitting) [code](https://github.com/deepmind/neural-processes)
 - [2018-07-04, "Conditional Neural Processes"](https://arxiv.org/abs/1807.01613) [code](https://github.com/deepmind/neural-processes)
+=======
+- [2018-12-03, "Empirical Evaluation of Neural Process Objectives"](http://bayesiandeeplearning.org/2018/papers/92.pdf)
+- [2019-01-17, "Attentive Neural Processes"](https://arxiv.org/abs/1901.05761) (using attention to prevent underfitting) [code](https://github.com/deepmind/neural-processes)
+- [2018-07-04, "Conditional Neural Processes"](https://arxiv.org/abs/1807.01613) [code](https://github.com/deepmind/neural-processes)
+- [2019-06-24, "Sequential Neural Processes"](https://arxiv.org/abs/1906.10264) [code](https://github.com/singhgautam/snp) modelling a 1 or 2d process evolving over time
+>>>>>>> e2e96cfe857561e5b3d53d24927c9dbaf655ae42
 - [2018-07-04, "Neural Processes"](https://arxiv.org/abs/1807.01622)
 
 Blogposts:
