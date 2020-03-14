@@ -28,7 +28,7 @@ class LatentModelPL(pl.LightningModule):
         context_x, context_y, target_x, target_y = batch
         y_pred, losses, extra = self.forward(context_x, context_y, target_x, target_y)
         y_std = extra['dist'].scale
-        loss = losses['loss']
+        loss = losses['loss'].mean()
 
         tensorboard_logs = {
             "train_loss": loss,
@@ -45,13 +45,13 @@ class LatentModelPL(pl.LightningModule):
         context_x, context_y, target_x, target_y = batch
         y_pred, losses, extra = self.forward(context_x, context_y, target_x, target_y)
         y_std = extra['dist'].scale
-        loss = losses['loss']
+        loss = losses['loss'].mean()
         
         tensorboard_logs = {
             "val_loss": loss, # This exact key is needed for metrics
             "val/kl": losses['loss_kl'].mean(),
-            "val/mse": losses['loss_mse'].mean(),
             "val/std": y_std.mean(),
+            "val/mse": losses['loss_mse'].mean(),
         }
         return {"val_loss": loss, "log": tensorboard_logs}
 
@@ -69,7 +69,7 @@ class LatentModelPL(pl.LightningModule):
 
         # agg and print self.train_logs HACK https://github.com/PyTorchLightning/pytorch-lightning/issues/100
         train_logs = self.agg_logs(self.train_logs)
-        train_logs_str = {k: f"{v}" for k, v in train_logs.items()}
+        train_logs_str = {k: f"{v.mean()}" for k, v in train_logs.items()}
         self.train_logs = []
         print(f"step val {self.trainer.global_step}, {tensorboard_logs_str} {train_logs}")
         return logs
