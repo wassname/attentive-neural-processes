@@ -18,6 +18,7 @@ class LatentModelPL(pl.LightningModule):
         self.hparams.update(hparams.__dict__ if hasattr(hparams, '__dict__') else hparams)
         self.model = LatentModel(**self.hparams)
         self._dfs = None
+        self.train_logs = [] 
 
     def forward(self, context_x, context_y, target_x, target_y):
         return self.model(context_x, context_y, target_x, target_y)
@@ -27,15 +28,16 @@ class LatentModelPL(pl.LightningModule):
         context_x, context_y, target_x, target_y = batch
         y_pred, losses, extra = self.forward(context_x, context_y, target_x, target_y)
         y_std = extra['dist'].scale
+        loss = losses['loss']
 
         tensorboard_logs = {
-            "train_loss": losses['loss'],
+            "train_loss": loss,
             "train/kl": losses['loss_kl'].mean(),
-            "train/std": losses['y_std'].mean(),
+            "train/std": y_std.mean(),
             "train/mse": losses['loss_mse'].mean(),
         }
         assert torch.isfinite(loss)
-        # print('device', next(self.model.parameters()).device)
+        self.train_logs.append(tensorboard_logs)
         return {"loss": loss, "log": tensorboard_logs}
 
     def validation_step(self, batch, batch_idx):
@@ -43,12 +45,13 @@ class LatentModelPL(pl.LightningModule):
         context_x, context_y, target_x, target_y = batch
         y_pred, losses, extra = self.forward(context_x, context_y, target_x, target_y)
         y_std = extra['dist'].scale
+        loss = losses['loss']
         
         tensorboard_logs = {
-            "val_loss": losses['loss'], # This exact key is needed for metrics
+            "val_loss": loss, # This exact key is needed for metrics
             "val/kl": losses['loss_kl'].mean(),
             "val/mse": losses['loss_mse'].mean(),
-            "val/std": losses['y_std'].mean(),
+            "val/std": y_std.mean(),
         }
         return {"val_loss": loss, "log": tensorboard_logs}
 
@@ -63,7 +66,12 @@ class LatentModelPL(pl.LightningModule):
             self.show_image()
         logs = self.agg_logs(outputs)
         tensorboard_logs_str = {k: f'{v}' for k, v in logs["log"].items()}
-        print(f"step val {self.trainer.global_step}, {tensorboard_logs_str}")
+
+        # agg and print self.train_logs HACK https://github.com/PyTorchLightning/pytorch-lightning/issues/100
+        train_logs = self.agg_logs(self.train_logs)
+        train_logs_str = {k: f"{v}" for k, v in train_logs.items()}
+        self.train_logs = []
+        print(f"step val {self.trainer.global_step}, {tensorboard_logs_str} {train_logs}")
         return logs
 
     def show_image(self):        
@@ -82,14 +90,15 @@ class LatentModelPL(pl.LightningModule):
         if isinstance(outputs, dict):
             outputs = [outputs]
         aggs = {}
-        for j in outputs[0]:
-            if isinstance(outputs[0][j], dict):
-                # Take mean of sub dicts
-                keys = outputs[0][j].keys()
-                aggs[j] = {k: torch.stack([x[j][k] for x in outputs if k in x[j]]).mean() for k in keys}
-            else:
-                # Take mean of numbers
-                aggs[j] = torch.stack([x[j] for x in outputs if j in x]).mean()
+        if len(outputs)>0:
+            for j in outputs[0]:
+                if isinstance(outputs[0][j], dict):
+                    # Take mean of sub dicts
+                    keys = outputs[0][j].keys()
+                    aggs[j] = {k: torch.stack([x[j][k] for x in outputs if k in x[j]]).mean() for k in keys}
+                else:
+                    # Take mean of numbers
+                    aggs[j] = torch.stack([x[j] for x in outputs if j in x]).mean()
         return aggs
 
         # # Log hparams with metric, doesn't work
