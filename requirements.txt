@@ -3,6 +3,6 @@ tqdm
 pandas
 numpy
 torchsummaryX>=2.0
-pytorch_lightning==0.6.0
+pytorch_lightning==0.7.1
 tensorboardX
 optuna

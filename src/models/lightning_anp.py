@@ -76,7 +76,7 @@ class LatentModelPL(pl.LightningModule):
 
     def show_image(self):        
         # https://github.com/PytorchLightning/pytorch-lightning/blob/f8d9f8f/pytorch_lightning/core/lightning.py#L293
-        loader = self.val_dataloader()[0]
+        loader = self.val_dataloader()
         vis_i = min(int(self.hparams["vis_i"]), len(loader.dataset))
         # print('vis_i', vis_i)
         if isinstance(self.hparams["vis_i"], str):
@@ -128,7 +128,6 @@ class LatentModelPL(pl.LightningModule):
             self._dfs = dict(df_train=df_train, df_test=df_test)
         return self._dfs
 
-    @pl.data_loader
     def train_dataloader(self):
         df_train = self._get_cache_dfs()['df_train']
         data_train = SmartMeterDataSet(
@@ -144,7 +143,6 @@ class LatentModelPL(pl.LightningModule):
             num_workers=self.hparams["num_workers"],
         )
 
-    @pl.data_loader
     def val_dataloader(self):
         df_test = self._get_cache_dfs()['df_test']
         data_test = SmartMeterDataSet(
@@ -159,7 +157,6 @@ class LatentModelPL(pl.LightningModule):
             ),
         )
 
-    @pl.data_loader
     def test_dataloader(self):
         df_test = self._get_cache_dfs()['df_test']
         data_test = SmartMeterDataSet(

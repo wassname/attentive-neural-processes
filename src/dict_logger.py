@@ -1,7 +1,7 @@
 """PyTorch Lightning `dict` logger."""
 
-from pytorch_lightning.logging import LightningLoggerBase
-from pytorch_lightning.logging.tensorboard import TensorBoardLogger
+from pytorch_lightning.loggers import LightningLoggerBase
+from pytorch_lightning.loggers.tensorboard import TensorBoardLogger
 
 class DictLogger(TensorBoardLogger):
     """PyTorch Lightning `dict` logger."""
