@@ -22,6 +22,10 @@ from torchvision.transforms import ToTensor
 from src.data.smart_meter import get_smartmeter_df
 
 from src.utils import ObjectDict
+from torch.utils.data._utils.collate import default_collate
+
+def collate_fn(batch, sample=None):
+    return default_collate(batch)
 
 def log_prob_sigma(value, loc, log_scale):
     """A slightly more stable (not confirmed yet) log prob taking in log_var instead of scale.
@@ -220,6 +224,7 @@ class LSTM_PL(pl.LightningModule):
             dset_train,
             batch_size=self.hparams.batch_size,
             shuffle=True,
+            collate_fn=collate_fn,
             num_workers=self.hparams.num_workers,
         )
 
@@ -231,9 +236,10 @@ class LSTM_PL(pl.LightningModule):
             self.hparams,
             label_names=["energy(kWh/hh)"],
             train=False,
+            
             transforms=transforms.ToTensor(),
         )
-        return DataLoader(dset_test, batch_size=self.hparams.batch_size, shuffle=False)
+        return DataLoader(dset_test, batch_size=self.hparams.batch_size, shuffle=False,collate_fn=collate_fn,)
 
     @pl.data_loader
     def test_dataloader(self):
@@ -243,9 +249,10 @@ class LSTM_PL(pl.LightningModule):
             self.hparams,
             label_names=["energy(kWh/hh)"],
             train=False,
+            
             transforms=transforms.ToTensor(),
         )
-        return DataLoader(dset_test, batch_size=self.hparams.batch_size, shuffle=False)
+        return DataLoader(dset_test, batch_size=self.hparams.batch_size, shuffle=False, collate_fn=collate_fn,)
 
     @staticmethod
     def add_suggest(trial):

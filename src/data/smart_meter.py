@@ -23,7 +23,7 @@ def collate_fns(max_num_context, max_num_extra_target, sample, sort=True, contex
         x = torch.from_numpy(x).float()
         y = torch.from_numpy(y).float()
 
-        # Last feature will show how far in time a point is from out last context
+        # Last feature will show how far in time a point is from our last context
         assert (np.diff(x[:, :, 0], 1)>=0).all(), 'first features should be ordered e.g. seconds'
         assert (x[:, max_num_context, -1]==0.).all(), 'last features should be empty'
         time = x[:, :, 0]

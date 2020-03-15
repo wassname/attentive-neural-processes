@@ -174,13 +174,13 @@ class LatentModelPL(pl.LightningModule):
     def add_suggest(trial):        
         trial.suggest_loguniform("learning_rate", 1e-5, 1e-2)
 
-        trial.suggest_categorical("hidden_dim", [8*2**i for i in range(6)])
-        trial.suggest_categorical("latent_dim", [8*2**i for i in range(6)])
+        trial.suggest_categorical("hidden_dim", [8*2**i for i in range(8)])
+        trial.suggest_categorical("latent_dim", [8*2**i for i in range(8)])
         
         trial.suggest_int("attention_layers", 1, 4)
-        trial.suggest_categorical("n_latent_encoder_layers", [1, 2, 4, 8])
-        trial.suggest_categorical("n_det_encoder_layers", [1, 2, 4, 8])
-        trial.suggest_categorical("n_decoder_layers", [1, 2, 4, 8])
+        trial.suggest_categorical("n_latent_encoder_layers", [1, 2, 4, 6, 8, 12])
+        trial.suggest_categorical("n_det_encoder_layers", [1, 2, 4, 6, 8, 12])
+        trial.suggest_categorical("n_decoder_layers", [1, 2, 4, 6, 8, 12])
         trial.suggest_int("num_heads", 8, 8)
 
         trial.suggest_uniform("dropout", 0, 0.9)

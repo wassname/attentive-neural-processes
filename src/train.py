@@ -94,15 +94,19 @@ def run_trial(
     model, trainer = main(
         trial, PL_MODEL_CLS, name=name, MODEL_DIR=MODEL_DIR, train=False, prune=False
     )
-    trainer.fit(model)
+    try:
+        trainer.fit(model)
+    except KeyboardInterrupt:
+        print('KeyboardInterrupt, skipping rest of training')
+        pass
 
     # Load checkpoint
-    checkpoint = sorted(Path(trainer.checkpoint_callback.dirpath).glob("*.ckpt"))[-1]
-    device = next(model.parameters()).device
-    print(f"Loading checkpoint {checkpoint}")
-    model = model.load_from_checkpoint(checkpoint).to(device)
-
-    trainer.test(model)
+    checkpoints = sorted(Path(trainer.checkpoint_callback.dirpath).glob("*.ckpt"))
+    if len(checkpoints):
+        checkpoint = checkpoints[-1]
+        device = next(model.parameters()).device
+        print(f"Loading checkpoint {checkpoint}")
+        model = model.load_from_checkpoint(checkpoint).to(device)
 
     # Plot
     loader = model.val_dataloader()
@@ -111,4 +115,10 @@ def run_trial(
     plot_from_loader(model.val_dataloader(), model, i=670, title='val 670')
     plot_from_loader(model.train_dataloader(), model, i=670, title='train 670')
     plot_from_loader(model.test_dataloader(), model, i=670, title='test 670')
+
+    try:
+        trainer.test(model)
+    except KeyboardInterrupt:
+        print('KeyboardInterrupt, skipping rest of testing')
+        pass
     return trial, trainer, model

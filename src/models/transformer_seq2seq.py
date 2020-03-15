@@ -44,7 +44,9 @@ class TransformerSeq2SeqNet(nn.Module):
         self._min_std = _min_std
 
         hidden_out_size = self.hparams.hidden_out_size
+        self.enc_norm = BatchNormSequence(self.hparams.input_size)
         self.enc_emb = nn.Linear(self.hparams.input_size, hidden_out_size)
+        encoder_norm = nn.LayerNorm(hidden_out_size)
         layer_enc = nn.TransformerEncoderLayer(
             d_model=hidden_out_size,
             dim_feedforward=self.hparams.hidden_size,
@@ -55,9 +57,11 @@ class TransformerSeq2SeqNet(nn.Module):
         self.encoder = nn.TransformerEncoder(
             layer_enc,
             num_layers=self.hparams.nlayers,
+            norm=encoder_norm
         )
 
 
+        self.dec_norm = BatchNormSequence(self.hparams.input_size_decoder)
         self.dec_emb = nn.Linear(self.hparams.input_size_decoder, hidden_out_size)
         layer_dec = nn.TransformerDecoderLayer(
             d_model=hidden_out_size,
@@ -65,26 +69,38 @@ class TransformerSeq2SeqNet(nn.Module):
             dropout=self.hparams.attention_dropout,
             nhead=self.hparams.nhead,
         )
+        decoder_norm = nn.LayerNorm(hidden_out_size)
         self.decoder = nn.TransformerDecoder(
             layer_dec,
             num_layers=self.hparams.nlayers,
+            norm=decoder_norm
         )
         self.mean = nn.Linear(hidden_out_size, self.hparams.output_size)
         self.std = nn.Linear(hidden_out_size, self.hparams.output_size)
 
+        # self._reset_parameters()
+
+
+    def _reset_parameters(self):
+        r"""Initiate parameters in the transformer model."""
+
+        for p in self.parameters():
+            if p.dim() > 1:
+                torch.nn.init.xavier_uniform_(p)
+
     def forward(self, context_x, context_y, target_x, target_y=None):
         x = torch.cat([context_x, context_y], -1)
         # Size([B, C, input_dim])
-        x = self.enc_emb(x)
+        x = self.enc_emb(self.enc_norm(x))
         # Size([B, C, emb_dim])
         memory = self.encoder(x)
         # Size([B, C, emb_dim])
-        target_x = self.dec_emb(target_x)
+        target_x = self.dec_emb(self.dec_norm(target_x))
         # Size([B, T, input_target_dim]) -> Size([B, T, emb_dim])
 
         # In transformers the memory and target_x need to be the same length. Lets use a permutation invariant agg on the context
         # Then expand it, so it's available as we decode, conditional on target_x
-        memory = memory.mean(dim=1, keepdim=True).expand_as(target_x)
+        memory = memory.max(dim=1, keepdim=True)[0].expand_as(target_x)
 
         outputs = self.decoder(target_x, memory)
         # Size([B, T, emb_dim])
@@ -266,7 +282,7 @@ class TransformerSeq2Seq_PL(pl.LightningModule):
         trial.suggest_uniform("attention_dropout", 0, 0.75)
         trial.suggest_categorical("hidden_size", [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048])    
         trial.suggest_categorical("hidden_out_size", [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048])    
-        trial.suggest_categorical("nlayers", [1, 2, 4, 8])    
+        trial.suggest_categorical("nlayers", [1, 2, 4, 6, 8, 16, 32])
         trial.suggest_categorical("nhead", [1, 2, 8, 16])
 
         trial._user_attrs = {
