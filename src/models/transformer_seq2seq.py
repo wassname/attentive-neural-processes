@@ -77,7 +77,7 @@ class TransformerSeq2SeqNet(nn.Module):
         )
         self.mean = nn.Linear(hidden_out_size, self.hparams.output_size)
         self.std = nn.Linear(hidden_out_size, self.hparams.output_size)
-
+        self._use_lvar = False
         # self._reset_parameters()
 
 
@@ -106,17 +106,21 @@ class TransformerSeq2SeqNet(nn.Module):
         # Size([B, T, emb_dim])
         mean = self.mean(outputs)
         log_sigma = self.std(outputs)
-        log_sigma = torch.clamp(log_sigma, math.log(self._min_std), -math.log(self._min_std))
-
-        sigma = torch.exp(log_sigma)
+        if self._use_lvar:
+            log_sigma = torch.clamp(log_sigma, math.log(self._min_std), -math.log(self._min_std))
+            sigma = torch.exp(log_sigma)
+        else:
+            sigma = self._min_std + (1 - self._min_std) * F.softplus(log_sigma)
         y_dist = torch.distributions.Normal(mean, sigma)
         
         # Loss
         loss_mse = loss_p = None
         if target_y is not None:
             loss_mse = F.mse_loss(mean, target_y, reduction='none')
-            loss_p = -log_prob_sigma(target_y, mean, log_sigma)
-            
+            if self._use_lvar:
+                loss_p = -log_prob_sigma(target_y, mean, log_sigma)
+            else:
+                loss_p = -y_dist.log_prob(target_y).mean(-1)
             if self.hparams["context_in_target"]:
                 loss_p[:context_x.size(1)] /= 100
                 loss_mse[:context_x.size(1)] /= 100

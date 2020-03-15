@@ -135,14 +135,20 @@ class LSTM_PL(pl.LightningModule):
         # Don't catch loss on context window
         mean = mean[:, self.hparams.window_length:]
         log_sigma = log_sigma[:, self.hparams.window_length:]
-
-        sigma = torch.exp(log_sigma)
+        if self._use_lvar:
+            log_sigma = torch.clamp(log_sigma, math.log(self._min_std), -math.log(self._min_std))
+            sigma = torch.exp(log_sigma)
+        else:
+            sigma = self._min_std + (1 - self._min_std) * F.softplus(log_sigma)
         y_dist = torch.distributions.Normal(mean, sigma)
 
         y = y[:, self.hparams.window_length:]
 
         loss_mse = F.mse_loss(mean, y)
-        loss_p = - log_prob_sigma(y, mean, log_sigma).mean()
+        if self._use_lvar:
+            loss_p = -log_prob_sigma(target_y, mean, log_sigma)
+        else:
+            loss_p = -y_dist.log_prob(target_y).mean(-1)
         loss = loss_p # + loss_mse
         tensorboard_logs = {"train/loss": loss, 'train/loss_mse': loss_mse, "train/loss_p": loss_p, "train/sigma": sigma.mean()}
         return {"loss": loss, "log": tensorboard_logs}
@@ -172,10 +178,10 @@ class LSTM_PL(pl.LightningModule):
             loader = self.val_dataloader()
             vis_i = min(int(self.hparams["vis_i"]), len(loader.dataset))
         if isinstance(self.hparams["vis_i"], str):
-            image = plot_from_loader(loader, self, vis_i=vis_i)
+            image = plot_from_loader(loader, self, i=vis_i)
             plt.show()
         else:
-            image = plot_from_loader_to_tensor(loader, self, vis_i=vis_i)
+            image = plot_from_loader_to_tensor(loader, self, i=vis_i)
             self.logger.experiment.add_image(
                 "val/image", image, self.trainer.global_step
             )
@@ -280,12 +286,12 @@ class LSTM_PL(pl.LightningModule):
         return trial
 
 
-def plot_from_loader(loader, model, vis_i=670, n=1, window_len=0):
+def plot_from_loader(loader, model, title='', i=670, n=1, window_len=0):
     dset_test = loader.dataset
     label_names = dset_test.label_names
     y_trues = []
     y_preds = []
-    vis_i = min(vis_i, len(dset_test))
+    vis_i = min(i, len(dset_test))
     for i in tqdm(range(vis_i, vis_i + n)):
         x_rows, y_rows = dset_test.iloc(i)
         x, y = dset_test[i]
@@ -309,9 +315,9 @@ def plot_from_loader(loader, model, vis_i=670, n=1, window_len=0):
     df_preds = pd.concat(y_preds)
 
     plt.figure()
-    df_trues[label_names[0]].plot(label="y_true")
+    df_trues[label_names[0]].plot(label="y_true", style="k:")
     ylims = plt.ylim()
-    df_preds[label_names[0]][window_len:].plot(label="y_pred")
+    df_preds[label_names[0]][window_len:].plot(label="y_pred", style="b", linewidth=2,)
 
     std = df_preds['sigma'][window_len:]
     mean = df_preds[label_names[0]][window_len:]
@@ -324,9 +330,18 @@ def plot_from_loader(loader, model, vis_i=670, n=1, window_len=0):
         interpolate=True,
         label="uncertainty",
     )
+    plt.fill_between(
+        df_preds.index[window_len:],
+        mean - std * 2,
+        mean + std * 2,
+        alpha=0.125,
+        facecolor="blue",
+        interpolate=True,
+        label="uncertainty",
+    )
     plt.legend()
     t_ahead = pd.Timedelta("30T") * model.hparams.target_length
-    plt.title(f"predicting {t_ahead} ahead")
+    plt.title(f"predicting {t_ahead} ahead. {title}")
     plt.ylim(*ylims)
     # plt.show()
 

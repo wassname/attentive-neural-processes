@@ -69,6 +69,7 @@ class Seq2SeqNet(nn.Module):
         )
         self.mean = nn.Linear(self.hidden_out_size, self.hparams.output_size)
         self.std = nn.Linear(self.hidden_out_size, self.hparams.output_size)
+        self._use_lvar = False
 
     def forward(self, context_x, context_y, target_x, target_y=None):
         x = torch.cat([context_x, context_y], -1)
@@ -95,16 +96,21 @@ class Seq2SeqNet(nn.Module):
         # outputs: [B, T, num_direction * H]
         mean = self.mean(outputs)
         log_sigma = self.std(outputs)
-        log_sigma = torch.clamp(log_sigma, math.log(self._min_std), -math.log(self._min_std))
-
-        sigma = torch.exp(log_sigma)
+        if self._use_lvar:
+            log_sigma = torch.clamp(log_sigma, math.log(self._min_std), -math.log(self._min_std))
+            sigma = torch.exp(log_sigma)
+        else:
+            sigma = self._min_std + (1 - self._min_std) * F.softplus(log_sigma)
         y_dist=torch.distributions.Normal(mean, sigma)
         
         # Loss
-        loss_mse =loss_p = None
+        loss_mse = loss_p = None
         if target_y is not None:
             loss_mse = F.mse_loss(mean, target_y, reduction='none')
-            loss_p = -log_prob_sigma(target_y, mean, log_sigma)
+            if self._use_lvar:
+                loss_p = -log_prob_sigma(target_y, mean, log_sigma)
+            else:
+                loss_p = -y_dist.log_prob(target_y).mean(-1)
             
             if self.hparams["context_in_target"]:
                 loss_p[:context_x.size(1)] /= 100

@@ -3,6 +3,7 @@ from optuna.integration.pytorch_lightning import _check_pytorch_lightning_availa
 from pathlib import Path
 import optuna
 import pytorch_lightning as pl
+from matplotlib import pyplot as plt
 import torch
 from .dict_logger import DictLogger
 from .utils import PyTorchLightningPruningCallback
@@ -84,6 +85,7 @@ def run_trial(
     params: dict = {},
     user_attrs: dict = {},
     MODEL_DIR: Path = Path("./lightning_logs"),
+    plot_from_loader=plot_from_loader,
 ):
     print(f"now run `tensorboard --logdir {MODEL_DIR}`")
     (MODEL_DIR / name).mkdir(parents=True, exist_ok=True)
@@ -113,8 +115,11 @@ def run_trial(
     dset_test = loader.dataset
     label_names = dset_test.label_names
     plot_from_loader(model.val_dataloader(), model, i=670, title='val 670')
+    plt.show()
     plot_from_loader(model.train_dataloader(), model, i=670, title='train 670')
+    plt.show()
     plot_from_loader(model.test_dataloader(), model, i=670, title='test 670')
+    plt.show()
 
     try:
         trainer.test(model)
