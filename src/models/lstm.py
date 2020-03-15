@@ -132,7 +132,7 @@ class LSTM_PL(pl.LightningModule):
     def validation_end(self, outputs):
         # TODO send an image to tensroboard, like in the lighting_anp.py file
         if int(self.hparams["vis_i"]) > 0:
-            loader = self.val_dataloader()[0]
+            loader = self.val_dataloader()
             vis_i = min(int(self.hparams["vis_i"]), len(loader.dataset))
         if isinstance(self.hparams["vis_i"], str):
             image = plot_from_loader(loader, self, vis_i=vis_i, window_len=self.hparams["window_length"])
@@ -163,15 +163,14 @@ class LSTM_PL(pl.LightningModule):
     def configure_optimizers(self):
         optim = torch.optim.Adam(self.parameters(), lr=self.hparams["learning_rate"])
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optim, patience=2, verbose=True, min_lr=1e-5
+            optim, patience=self.hparams["patience"], verbose=True, min_lr=1e-5
         )  # note early stopping has patient 3
         return [optim], [scheduler]
 
     def _get_cache_dfs(self):
         if self._dfs is None:
-            df_train, df_test = get_smartmeter_df()
-            # self._dfs = dict(df_train=df_train[:600], df_test=df_test[:600])
-            self._dfs = dict(df_train=df_train, df_test=df_test)
+            df_train, df_val, df_test = get_smartmeter_df()
+            self._dfs = dict(df_train=df_train, df_val=df_val, df_test=df_test)
         return self._dfs
 
     @pl.data_loader
@@ -193,7 +192,7 @@ class LSTM_PL(pl.LightningModule):
 
     @pl.data_loader
     def val_dataloader(self):
-        df_test = self._get_cache_dfs()["df_test"]
+        df_test = self._get_cache_dfs()["df_val"]
         dset_test = SequenceDfDataSet(
             df_test,
             self.hparams,
@@ -216,27 +215,41 @@ class LSTM_PL(pl.LightningModule):
         return DataLoader(dset_test, batch_size=self.hparams.batch_size, shuffle=False)
 
     @staticmethod
-    def add_model_specific_args(parent_parser):
+    def add_suggest(trial: optuna.Trial):
         """
-        Specify the hyperparams for this LightningModule
+        Add hyperparam ranges to an optuna trial and typical user attrs.
+        
+        Usage:
+            trial = optuna.trial.FixedTrial(
+                params={         
+                    'hidden_size': 128,
+                }
+            )
+            trial = add_suggest(trial)
+            trainer = pl.Trainer()
+            model = LSTM_PL(dict(**trial.params, **trial.user_attrs), dataset_train,
+                            dataset_test, cache_base_path, norm)
+            trainer.fit(model)
         """
-        # MODEL specific
-        parser = HyperOptArgumentParser(parents=[parent_parser])
-        parser.add_argument("--learning_rate", default=0.002, type=float)
-        parser.add_argument("--batch_size", default=16, type=int)
-        parser.add_argument("--lstm_dropout", default=0.5, type=float)
-        parser.add_argument("--hidden_size", default=16, type=int)
-        parser.add_argument("--input_size", default=8, type=int)
-        parser.add_argument("--lstm_layers", default=8, type=int)
-        parser.add_argument("--bidirectional", default=False, type=bool)
+        trial.suggest_loguniform("learning_rate", 1e-6, 1e-2)
+        trial.suggest_uniform("lstm_dropout", 0, 0.75)
+        trial.suggest_categorical(
+            "hidden_size", [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
+        )
+        trial.suggest_categorical("lstm_layers", [1, 2, 3, 4, 6,  8])
+        trial.suggest_categorical("bidirectional", [False, True])
 
-        # training specific (for this model)
-        parser.add_argument("--window_length", type=int, default=12)
-        parser.add_argument("--target_length", type=int, default=2)
-        parser.add_argument("--max_nb_epochs", default=10, type=int)
-        parser.add_argument("--num_workers", default=4, type=int)
-
-        return parser
+        trial._user_attrs = {
+            "batch_size": 16,
+            "grad_clip": 40,
+            "max_nb_epochs": 200,
+            "num_workers": 4,
+            "vis_i": 670,
+            "input_size": 6,
+            "output_size": 1,
+            "patience": 2,
+        }
+        return trial
 
 
 def plot_from_loader(loader, model, vis_i=670, n=1, window_len=0):

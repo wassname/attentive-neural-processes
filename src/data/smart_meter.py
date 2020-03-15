@@ -155,7 +155,7 @@ def get_smartmeter_df(indir=Path('./data/smart-meters-in-london'), use_logy=Fals
     df['dayofweek'] = time.dt.dayofweek / 7.0
 
     # Drop nan and 0's
-    df = df[df['energy(kWh/hh)']!=0]
+    df = df[df['energy(kWh/hh)'] != 0]
     df = df.dropna()
 
     if use_logy:
@@ -163,7 +163,9 @@ def get_smartmeter_df(indir=Path('./data/smart-meters-in-london'), use_logy=Fals
     df = df.sort_values('tstp')
     
     # split data
-    n_split = -int(len(df)*0.1)
-    df_train = df[:n_split]
-    df_test = df[n_split:]
-    return df_train, df_test
+    test_split= -int(len(df) * 0.1)
+    val_split= int(len(df) * 0.15)
+    df_test = df[:val_split]
+    df_train = df[val_split:test_split]
+    df_val = df[test_split:]
+    return df_train, df_val, df_test

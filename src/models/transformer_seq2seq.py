@@ -19,9 +19,11 @@ from matplotlib import pyplot as plt
 import torch
 import io
 import PIL
+import optuna
 from torchvision.transforms import ToTensor
 
 from src.data.smart_meter import get_smartmeter_df
+from src.models.modules import BatchNormSequence
 
 from src.utils import ObjectDict
 
@@ -41,7 +43,6 @@ class TransformerSeq2SeqNet(nn.Module):
         self.hparams = hparams
         self._min_std = _min_std
 
-        # TODO project to 8*nhead
         hidden_out_size = self.hparams.hidden_out_size
         self.enc_emb = nn.Linear(self.hparams.input_size, hidden_out_size)
         layer_enc = nn.TransformerEncoderLayer(
@@ -92,7 +93,7 @@ class TransformerSeq2SeqNet(nn.Module):
         log_sigma = torch.clamp(log_sigma, math.log(self._min_std), -math.log(self._min_std))
 
         sigma = torch.exp(log_sigma)
-        y_dist=torch.distributions.Normal(mean, sigma)
+        y_dist = torch.distributions.Normal(mean, sigma)
         
         # Loss
         loss_mse = loss_p = None
@@ -188,15 +189,14 @@ class TransformerSeq2Seq_PL(pl.LightningModule):
     def configure_optimizers(self):
         optim = torch.optim.Adam(self.parameters(), lr=self.hparams["learning_rate"])
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optim, patience=2, verbose=True, min_lr=1e-5
-        )  # note early stopping has patient 3
+            optim, patience=self.hparams["patience"], verbose=True, min_lr=1e-7
+        )  # note early stopping has patience 3
         return [optim], [scheduler]
 
     def _get_cache_dfs(self):
         if self._dfs is None:
-            df_train, df_test = get_smartmeter_df()
-            # self._dfs = dict(df_train=df_train[:600], df_test=df_test[:600])
-            self._dfs = dict(df_train=df_train, df_test=df_test)
+            df_train, df_val, df_test = get_smartmeter_df()
+            self._dfs = dict(df_train=df_train, df_val=df_val, df_test=df_test)
         return self._dfs
 
     @pl.data_loader
@@ -217,7 +217,7 @@ class TransformerSeq2Seq_PL(pl.LightningModule):
 
     @pl.data_loader
     def val_dataloader(self):
-        df_test = self._get_cache_dfs()['df_test']
+        df_test = self._get_cache_dfs()['df_val']
         data_test = SmartMeterDataSet(
             df_test, self.hparams["num_context"], self.hparams["num_extra_target"]
         )
@@ -246,27 +246,41 @@ class TransformerSeq2Seq_PL(pl.LightningModule):
         )
 
     @staticmethod
-    def add_model_specific_args(parent_parser):
+    def add_suggest(trial: optuna.Trial):
         """
-        Specify the hyperparams for this LightningModule
+        Add hyperparam ranges to an optuna trial and typical user attrs.
+        
+        Usage:
+            trial = optuna.trial.FixedTrial(
+                params={         
+                    'hidden_size': 128,
+                }
+            )
+            trial = add_suggest(trial)
+            trainer = pl.Trainer()
+            model = LSTM_PL(dict(**trial.params, **trial.user_attrs), dataset_train,
+                            dataset_test, cache_base_path, norm)
+            trainer.fit(model)
         """
-        # MODEL specific
-        parser = HyperOptArgumentParser(parents=[parent_parser])
-        parser.add_argument("--learning_rate", default=0.002, type=float)
-        parser.add_argument("--batch_size", default=16, type=int)
-        parser.add_argument("--attention_dropout", default=0.5, type=float)
-        parser.add_argument("--hidden_size", default=16, type=int)
-        parser.add_argument("--hidden_out_size", default=16, type=int)        
-        parser.add_argument("--input_size", default=8, type=int)
-        parser.add_argument("--nhead", default=8, type=int)
-        parser.add_argument("--input_size_decoder", default=8, type=int)        
-        parser.add_argument("--nlayers", default=8, type=int)
-        # parser.add_argument("--bidirectional", default=False, type=bool)
+        trial.suggest_loguniform("learning_rate", 1e-6, 1e-2)
+        trial.suggest_uniform("attention_dropout", 0, 0.75)
+        trial.suggest_categorical("hidden_size", [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048])    
+        trial.suggest_categorical("hidden_out_size", [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048])    
+        trial.suggest_categorical("nlayers", [1, 2, 4, 8])    
+        trial.suggest_categorical("nhead", [1, 2, 8, 16])
 
-        # training specific (for this model)
-        parser.add_argument("--num_context", type=int, default=12)
-        parser.add_argument("--num_extra_target", type=int, default=2)
-        parser.add_argument("--max_nb_epochs", default=10, type=int)
-        parser.add_argument("--num_workers", default=4, type=int)
-
-        return parser
+        trial._user_attrs = {
+            'batch_size': 16,
+            'grad_clip': 40,
+            'max_nb_epochs': 200,
+            'num_workers': 4,
+            'num_extra_target': 24*4,
+            'vis_i': '670',
+            'num_context': 24*4,
+            'input_size': 18,
+            'input_size_decoder': 17,
+            'context_in_target': True,
+            'output_size': 1,
+            'patience': 3,
+        }
+        return trial

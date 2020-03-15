@@ -20,7 +20,7 @@ import torch
 import io
 import PIL
 from torchvision.transforms import ToTensor
-
+from src.models.modules import BatchNormSequence
 from src.data.smart_meter import get_smartmeter_df
 
 from src.utils import ObjectDict
@@ -41,6 +41,9 @@ class Seq2SeqNet(nn.Module):
         self.hparams = hparams
         self._min_std = _min_std
 
+
+
+        self.norm_input = BatchNormSequence(self.hparams.input_size)
         self.encoder = nn.LSTM(
             input_size=self.hparams.input_size,
             hidden_size=self.hparams.hidden_size,
@@ -49,6 +52,9 @@ class Seq2SeqNet(nn.Module):
             bidirectional=self.hparams.bidirectional,
             dropout=self.hparams.lstm_dropout,
         )
+        self.multihead_attn = nn.MultiheadAttention(self.hparams.hidden_size, num_heads=8)
+
+        self.norm_target = BatchNormSequence(self.hparams.input_size_decoder)
         self.decoder = nn.LSTM(
             input_size=self.hparams.input_size_decoder,
             hidden_size=self.hparams.hidden_size,
@@ -66,9 +72,23 @@ class Seq2SeqNet(nn.Module):
 
     def forward(self, context_x, context_y, target_x, target_y=None):
         x = torch.cat([context_x, context_y], -1)
+
+        # Sometimes input normalisation can be important, an initial batch norm is a nice way to ensure this
+        x = self.norm_input(x)
+        target_x = self.norm_target(target_x)
+
         _, (h_out, cell) = self.encoder(x)
         # hidden = [batch size, n layers * n directions, hid dim]
         # cell = [batch size, n layers * n directions, hid dim]
+
+        # context_x, d_encoded, target_x = k, v, q
+
+        # query, key, value = target_x, context_x, d_encoded
+        attn_output, _ = self.multihead_attn(h_out.permute(1, 0, 2), h_out.permute(1, 0, 2), h_out.permute(1, 0, 2))
+        h_out = attn_output.permute(1, 0, 2).contiguous()
+        attn_output, _ = self.multihead_attn(cell.permute(1, 0, 2), cell.permute(1, 0, 2), cell.permute(1, 0, 2))
+        cell = attn_output.permute(1, 0, 2).contiguous()
+
         outputs, (_, _) = self.decoder(target_x, (h_out, cell))
         # output = [batch size, seq len, hid dim * n directions]
         
@@ -155,7 +175,7 @@ class LSTMSeq2Seq_PL(pl.LightningModule):
 
     def show_image(self):        
         # https://github.com/PytorchLightning/pytorch-lightning/blob/f8d9f8f/pytorch_lightning/core/lightning.py#L293
-        loader = self.val_dataloader()[0]
+        loader = self.val_dataloader()
         vis_i = min(int(self.hparams["vis_i"]), len(loader.dataset))
         # print('vis_i', vis_i)
         if isinstance(self.hparams["vis_i"], str):
@@ -174,15 +194,14 @@ class LSTMSeq2Seq_PL(pl.LightningModule):
     def configure_optimizers(self):
         optim = torch.optim.Adam(self.parameters(), lr=self.hparams["learning_rate"])
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optim, patience=2, verbose=True, min_lr=1e-5
+            optim, patience=self.hparams["patience"], verbose=True, min_lr=1e-5
         )  # note early stopping has patient 3
         return [optim], [scheduler]
 
     def _get_cache_dfs(self):
         if self._dfs is None:
-            df_train, df_test = get_smartmeter_df()
-            # self._dfs = dict(df_train=df_train[:600], df_test=df_test[:600])
-            self._dfs = dict(df_train=df_train, df_test=df_test)
+            df_train, df_val, df_test = get_smartmeter_df()
+            self._dfs = dict(df_train=df_train, df_val=df_val, df_test=df_test)
         return self._dfs
 
     @pl.data_loader
@@ -203,7 +222,7 @@ class LSTMSeq2Seq_PL(pl.LightningModule):
 
     @pl.data_loader
     def val_dataloader(self):
-        df_test = self._get_cache_dfs()['df_test']
+        df_test = self._get_cache_dfs()['df_val']
         data_test = SmartMeterDataSet(
             df_test, self.hparams["num_context"], self.hparams["num_extra_target"]
         )
@@ -232,25 +251,25 @@ class LSTMSeq2Seq_PL(pl.LightningModule):
         )
 
     @staticmethod
-    def add_model_specific_args(parent_parser):
-        """
-        Specify the hyperparams for this LightningModule
-        """
-        # MODEL specific
-        parser = HyperOptArgumentParser(parents=[parent_parser])
-        parser.add_argument("--learning_rate", default=0.002, type=float)
-        parser.add_argument("--batch_size", default=16, type=int)
-        parser.add_argument("--lstm_dropout", default=0.5, type=float)
-        parser.add_argument("--hidden_size", default=16, type=int)
-        parser.add_argument("--input_size", default=8, type=int)
-        parser.add_argument("--input_size_decoder", default=8, type=int)        
-        parser.add_argument("--lstm_layers", default=8, type=int)
-        parser.add_argument("--bidirectional", default=False, type=bool)
+    def add_suggest(trial):
+        trial.suggest_loguniform("learning_rate", 1e-5, 1e-2)
+        trial.suggest_uniform("lstm_dropout", 0, 0.75)
+        trial.suggest_categorical("hidden_size", [1, 2, 4, 8, 16, 32, 64, 128, 256, 512])    
+        trial.suggest_categorical("lstm_layers", [1, 2, 4, 8])    
+        trial.suggest_categorical("bidirectional", [False, True])    
+        
 
-        # training specific (for this model)
-        parser.add_argument("--num_context", type=int, default=12)
-        parser.add_argument("--num_extra_target", type=int, default=2)
-        parser.add_argument("--max_nb_epochs", default=10, type=int)
-        parser.add_argument("--num_workers", default=4, type=int)
-
-        return parser
+        trial._user_attrs = {
+                'batch_size': 16,
+                'grad_clip': 40,
+                'max_nb_epochs': 200,
+                'num_workers': 4,
+                'num_extra_target': 24*4,
+                'vis_i': '670',
+                'num_context': 24*4,
+                'input_size': 18,
+                'input_size_decoder': 17,
+                'context_in_target': True,
+                'output_size': 1
+        }
+        return trial

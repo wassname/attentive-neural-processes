@@ -5,7 +5,7 @@ from torch.utils.data import TensorDataset, DataLoader
 import math
 
 from src.models.modules import LatentEncoder, DeterministicEncoder, Decoder
-
+from src.models.modules import BatchNormSequence
 
 def log_prob_sigma(value, loc, log_scale):
     """A slightly more stable (not confirmed yet) log prob taking in log_var instead of scale.
@@ -66,18 +66,32 @@ class LatentModel(nn.Module):
         self._use_rnn = use_rnn
         self.context_in_target = context_in_target
 
+        # Sometimes input normalisation can be important, an initial batch norm is a nice way to ensure this
+        self.norm_x = BatchNormSequence(x_dim)
+        self.norm_y = BatchNormSequence(y_dim)
+
         if self._use_rnn:
-            self._lstm = nn.LSTM(
+            self._lstm_x = nn.LSTM(
                 input_size=x_dim,
                 hidden_size=hidden_dim,
                 num_layers=attention_layers,
                 dropout=dropout,
                 batch_first=True
             )
+            self._lstm_y = nn.LSTM(
+                input_size=y_dim,
+                hidden_size=hidden_dim,
+                num_layers=attention_layers,
+                dropout=dropout,
+                batch_first=True
+            )
             x_dim = hidden_dim
+            y_dim2 = hidden_dim
+        else:
+            y_dim2 = y_dim
 
         self._latent_encoder = LatentEncoder(
-            x_dim + y_dim,
+            x_dim + y_dim2,
             hidden_dim=hidden_dim,
             latent_dim=latent_dim,
             self_attention_type=latent_enc_self_attn_type,
@@ -93,7 +107,7 @@ class LatentModel(nn.Module):
         )
 
         self._deterministic_encoder = DeterministicEncoder(
-            input_dim=x_dim + y_dim,
+            input_dim=x_dim + y_dim2,
             x_dim=x_dim,
             hidden_dim=hidden_dim,
             self_attention_type=det_enc_self_attn_type,
@@ -126,16 +140,26 @@ class LatentModel(nn.Module):
 
     def forward(self, context_x, context_y, target_x, target_y=None):
 
+        # https://stackoverflow.com/a/46772183/221742
+        target_x = self.norm_x(target_x)
+        context_x = self.norm_x(context_x)
+        context_y = self.norm_y(context_y)
+
         if self._use_rnn:
             # see https://arxiv.org/abs/1910.09323 where x is substituted with h = RNN(x)
             # x need to be provided as [B, T, H]
-            target_x, _ = self._lstm(target_x)
-            context_x, _ = self._lstm(context_x)
+            target_x, _ = self._lstm_x(target_x)
+            context_x, _ = self._lstm_x(context_x)
+            context_y, _ = self._lstm_y(context_y)
+            
 
         dist_prior, log_var_prior = self._latent_encoder(context_x, context_y)
 
         if target_y is not None:
-            dist_post, log_var_post = self._latent_encoder(target_x, target_y)
+            target_y2 = self.norm_y(target_y)
+            if self._use_rnn:
+                target_y2, _ = self._lstm_y(target_y2)
+            dist_post, log_var_post = self._latent_encoder(target_x, target_y2)
             z = dist_post.loc
         else:
             z = dist_prior.loc

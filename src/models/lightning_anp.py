@@ -69,7 +69,7 @@ class LatentModelPL(pl.LightningModule):
 
         # agg and print self.train_logs HACK https://github.com/PyTorchLightning/pytorch-lightning/issues/100
         train_logs = self.agg_logs(self.train_logs)
-        train_logs_str = {k: f"{v.mean()}" for k, v in train_logs.items()}
+        train_logs_str = {k: f"{v}" for k, v in train_logs.items()}
         self.train_logs = []
         print(f"step val {self.trainer.global_step}, {tensorboard_logs_str} {train_logs}")
         return logs
@@ -95,10 +95,10 @@ class LatentModelPL(pl.LightningModule):
                 if isinstance(outputs[0][j], dict):
                     # Take mean of sub dicts
                     keys = outputs[0][j].keys()
-                    aggs[j] = {k: torch.stack([x[j][k] for x in outputs if k in x[j]]).mean() for k in keys}
+                    aggs[j] = {k: torch.stack([x[j][k] for x in outputs if k in x[j]]).mean().item() for k in keys}
                 else:
                     # Take mean of numbers
-                    aggs[j] = torch.stack([x[j] for x in outputs if j in x]).mean()
+                    aggs[j] = torch.stack([x[j] for x in outputs if j in x]).mean().item()
         return aggs
 
         # # Log hparams with metric, doesn't work
@@ -117,15 +117,14 @@ class LatentModelPL(pl.LightningModule):
         return self.validation_end(*args, **kwargs)
 
     def configure_optimizers(self):
-        optim = torch.optim.Adam(self.parameters(), lr=self.hparams["learning_rate"], weight_decay=0)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, patience=1, verbose=True, min_lr=1e-7)  # note early stopping has patience 3
+        optim = torch.optim.AdamW(self.parameters(), lr=self.hparams["learning_rate"], weight_decay=0)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, patience=self.hparams["patience"], verbose=True, min_lr=1e-7)  # note early stopping has patience 3
         return [optim], [scheduler]
 
     def _get_cache_dfs(self):
         if self._dfs is None:
-            df_train, df_test = get_smartmeter_df()
-            # self._dfs = dict(df_train=df_train[:600], df_test=df_test[:600])
-            self._dfs = dict(df_train=df_train, df_test=df_test)
+            df_train, df_val, df_test = get_smartmeter_df()
+            self._dfs = dict(df_train=df_train, df_val=df_val, df_test=df_test)
         return self._dfs
 
     def train_dataloader(self):
@@ -144,7 +143,7 @@ class LatentModelPL(pl.LightningModule):
         )
 
     def val_dataloader(self):
-        df_test = self._get_cache_dfs()['df_test']
+        df_test = self._get_cache_dfs()['df_val']
         data_test = SmartMeterDataSet(
             df_test, self.hparams["num_context"], self.hparams["num_extra_target"]
         )
@@ -172,49 +171,47 @@ class LatentModelPL(pl.LightningModule):
         )
 
     @staticmethod
-    def add_model_specific_args(parent_parser):
-        """
-        Specify the hyperparams for this LightningModule
-        """
-        # MODEL specific
-        parser = HyperOptArgumentParser(strategy=parent_parser.strategy, parents=[parent_parser], add_help=False)
-        parser.opt_range("--learning_rate", default=1e-3, type=float, tunable=True, high=1e-2, low=1e-5, log_base=10)
+    def add_suggest(trial):        
+        trial.suggest_loguniform("learning_rate", 1e-5, 1e-2)
+
+        trial.suggest_categorical("hidden_dim", [8*2**i for i in range(6)])
+        trial.suggest_categorical("latent_dim", [8*2**i for i in range(6)])
         
-        parser.opt_list("--hidden_dim", default=128, type=int, tunable=True, options=[8*2**i for i in range(8)])
-        parser.opt_list("--latent_dim", default=128, type=int, tunable=True, options=[8*2**i for i in range(8)])
-        parser.add_argument("--num_heads", default=8, type=int)
-        parser.add_argument("--attention_layers", default=1, type=int)
-        parser.opt_list("--n_latent_encoder_layers", default=4, type=int, tunable=True, options=[1, 2, 4, 8, 16])
-        parser.opt_list("--n_det_encoder_layers", default=4, type=int, tunable=True, options=[1, 2, 4, 8, 16])
-        parser.opt_list("--n_decoder_layers", default=2, type=int, tunable=True, options=[1, 2, 4, 8, 16])
+        trial.suggest_int("attention_layers", 1, 4)
+        trial.suggest_categorical("n_latent_encoder_layers", [1, 2, 4, 8])
+        trial.suggest_categorical("n_det_encoder_layers", [1, 2, 4, 8])
+        trial.suggest_categorical("n_decoder_layers", [1, 2, 4, 8])
+        trial.suggest_int("num_heads", 8, 8)
 
-        parser.opt_range("--dropout", default=0, type=float, tunable=True, low=0, high=0.75)
-        parser.opt_range("--attention_dropout", default=0, type=float, tunable=True, low=0, high=0.75)
-        parser.add_argument("--min_std", default=0.005, type=float)
+        trial.suggest_uniform("dropout", 0, 0.9)
+        trial.suggest_uniform("attention_dropout", 0, 0.9)
 
-        parser.opt_list(
-            "--latent_enc_self_attn_type", default="multihead", type=str, tunable=True, options=['uniform', 'dot', 'multihead', 'ptmultihead']
+        trial.suggest_categorical(
+            "latent_enc_self_attn_type", ['uniform', 'multihead', 'ptmultihead']
         )
-        parser.opt_list("--det_enc_self_attn_type", default="multihead", type=str, tunable=True, options=['uniform', 'dot', 'multihead', 'ptmultihead'])
-        parser.opt_list("--det_enc_cross_attn_type", default="multihead", type=str, tunable=True, options=['uniform', 'dot', 'multihead', 'ptmultihead'])
+        trial.suggest_categorical("det_enc_self_attn_type",  ['uniform', 'multihead', 'ptmultihead'])
+        trial.suggest_categorical("det_enc_cross_attn_type", ['uniform', 'multihead', 'ptmultihead'])
 
-        parser.opt_list("--use_lvar", default=False, type=bool, tunable=True, options=[False, True])
-        parser.opt_list("--use_rnn", default=False, type=bool, tunable=True, options=[False, True])
-        parser.opt_list("--use_deterministic_path", default=True, tunable=True, type=bool, options=[False, True])
-        parser.opt_list("--use_self_attn", default=True, tunable=True, type=bool, options=[False, True])
-        parser.opt_list("--batchnorm", default=True, tunable=True, type=bool, options=[False, True])
-        
-        # training specific (for this model)
-        parser.add_argument("--context_in_target", default=True, type=bool)
-        parser.add_argument("--grad_clip", default=0, type=float)
-        parser.add_argument("--num_context", type=int, default=24 * 2)
-        parser.add_argument("--num_extra_target", type=int, default=24)
-        parser.add_argument("--max_nb_epochs", default=20, type=int)
-        parser.add_argument("--num_workers", default=4, type=int)
+        trial.suggest_categorical("batchnorm", [False, True])
+        trial.suggest_categorical("use_self_attn", [False, True])
+        trial.suggest_categorical("use_lvar", [False, True])
+        trial.suggest_categorical("use_deterministic_path", [False, True])
+        trial.suggest_categorical("use_rnn", [True, False])
 
-        parser.add_argument("--batch_size", default=16, type=int)
-        parser.add_argument("--x_dim", default=16, type=int)
-        parser.add_argument("--y_dim", default=1, type=int)
-        parser.add_argument("--vis_i", default=670, type=int)
-        return parser
+        trial._user_attrs = {
+            'batch_size': 16,
+            'grad_clip': 40,
+            'max_nb_epochs': 200,
+            'num_workers': 4,
+            'num_context': 24* 4,
+            'vis_i': '670',
+            'num_extra_target': 24*4,
+            'x_dim': 18,
+            'context_in_target': True,
+            'y_dim': 1,
+            'patience': 3,
+            'min_std': 0.005,
+        }        
+        return trial
+
 

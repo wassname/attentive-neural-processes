@@ -1,5 +1,18 @@
 from pytorch_lightning.callbacks import EarlyStopping
 from optuna.integration.pytorch_lightning import _check_pytorch_lightning_availability
+from pathlib import Path
+import numpy as np
+import torch
+import optuna
+
+
+def init_random_seed(seed):
+    # https://pytorch.org/docs/stable/notes/randomness.html
+    np.random.seed(seed)
+    torch.random.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False    
+
 
 class PyTorchLightningPruningCallback(EarlyStopping):
     """Optuna PyTorch Lightning callback to prune unpromising trials.
@@ -20,10 +33,10 @@ class PyTorchLightningPruningCallback(EarlyStopping):
             how this dictionary is formatted.
     """
 
-    def __init__(self, trial, monitor):
+    def __init__(self, trial, monitor, **kwargs):
         # type: (optuna.trial.Trial, str) -> None
 
-        super(PyTorchLightningPruningCallback, self).__init__(monitor)
+        super().__init__(monitor, **kwargs)
 
         _check_pytorch_lightning_availability()
 
@@ -41,25 +54,26 @@ class PyTorchLightningPruningCallback(EarlyStopping):
             message = "Trial was pruned at epoch {}.".format(epoch)
             raise optuna.exceptions.TrialPruned(message)
 
+
 class ObjectDict(dict):
     """
     Interface similar to an argparser
     """
+
     def __init__(self):
         pass
-    
+
     def __setattr__(self, attr, value):
         self[attr] = value
         return self[attr]
-    
+
     def __getattr__(self, attr):
-        if attr.startswith('_'):
+        if attr.startswith("_"):
             # https://stackoverflow.com/questions/10364332/how-to-pickle-python-object-derived-from-dict
             raise AttributeError
         return dict(self)[attr]
-    
+
     @property
     def __dict__(self):
         return dict(self)
-
 

@@ -24,6 +24,22 @@ class LSTMBlock(nn.Module):
         return self._lstm(x)[0]
 
 
+class BatchNormSequence(nn.Module):
+    """Applies batch norm on features of a batch first sequence."""
+    def __init__(
+        self, out_channels
+    ):
+        super().__init__()
+        self.norm = nn.BatchNorm1d(out_channels)
+
+    def forward(self, x):
+        # x.shape is (Batch, Sequence, Channels)
+        # Now we want to apply batchnorm and dropout to the channels. So we put it in shape
+        # (Batch, Channels, Sequence) so we can use BatchNorm1d
+        x = x.permute(0, 2, 1)
+        x = self.norm(x)
+        return x.permute(0, 2, 1)
+
 class NPBlockRelu2d(nn.Module):
     """Block for Neural Processes."""
 
