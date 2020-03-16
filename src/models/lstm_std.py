@@ -108,7 +108,7 @@ class LSTMNet(nn.Module):
         # outputs: [B, T, num_direction * H]
         mean = self.mean(outputs).squeeze(2)
         log_sigma = self.std(outputs).squeeze(2)
-        log_sigma = torch.clamp(log_sigma, math.log(self._min_std), -math.log(1e-5))
+        # log_sigma = torch.clamp(log_sigma, math.log(self._min_std), -math.log(self._min_std))
         return mean, log_sigma
 
 
@@ -123,6 +123,8 @@ class LSTM_PL(pl.LightningModule):
         )
         self._model = LSTMNet(self.hparams)
         self._dfs = None
+        self._use_lvar = False
+        self._min_std = 0.005
 
     def forward(self, x):
         return self._model(x)
@@ -144,11 +146,11 @@ class LSTM_PL(pl.LightningModule):
 
         y = y[:, self.hparams.window_length:]
 
-        loss_mse = F.mse_loss(mean, y)
+        loss_mse = F.mse_loss(mean, y).mean()
         if self._use_lvar:
-            loss_p = -log_prob_sigma(target_y, mean, log_sigma)
+            loss_p = -log_prob_sigma(y, mean, log_sigma).mean()
         else:
-            loss_p = -y_dist.log_prob(target_y).mean(-1)
+            loss_p = -y_dist.log_prob(y).mean()
         loss = loss_p # + loss_mse
         tensorboard_logs = {"train/loss": loss, 'train/loss_mse': loss_mse, "train/loss_p": loss_p, "train/sigma": sigma.mean()}
         return {"loss": loss, "log": tensorboard_logs}
@@ -166,7 +168,7 @@ class LSTM_PL(pl.LightningModule):
 
         y = y[:, self.hparams.window_length:]
 
-        loss_mse = F.mse_loss(mean, y)
+        loss_mse = F.mse_loss(mean, y).mean()
         loss_p = -log_prob_sigma(y, mean, log_sigma).mean()
         loss = loss_p # + loss_mse
         tensorboard_logs = {"val_loss": loss, 'val/loss':loss, 'val/loss_mse': loss_mse, "val/loss_p": loss_p, "val/sigma": sigma.mean()}
@@ -216,7 +218,6 @@ class LSTM_PL(pl.LightningModule):
             self._dfs = dict(df_train=df_train, df_val=df_val, df_test=df_test)
         return self._dfs
 
-    @pl.data_loader
     def train_dataloader(self):
         df_train = self._get_cache_dfs()["df_train"]
         dset_train = SequenceDfDataSet(
@@ -234,7 +235,6 @@ class LSTM_PL(pl.LightningModule):
             num_workers=self.hparams.num_workers,
         )
 
-    @pl.data_loader
     def val_dataloader(self):
         df_test = self._get_cache_dfs()["df_val"]
         dset_test = SequenceDfDataSet(
