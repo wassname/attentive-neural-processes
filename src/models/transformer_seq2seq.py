@@ -60,7 +60,6 @@ class TransformerSeq2SeqNet(nn.Module):
             norm=encoder_norm
         )
 
-
         self.dec_norm = BatchNormSequence(self.hparams.input_size_decoder)
         self.dec_emb = nn.Linear(self.hparams.input_size_decoder, hidden_out_size)
         layer_dec = nn.TransformerDecoderLayer(
@@ -89,20 +88,21 @@ class TransformerSeq2SeqNet(nn.Module):
                 torch.nn.init.xavier_uniform_(p)
 
     def forward(self, context_x, context_y, target_x, target_y=None):
+        device = next(self.parameters()).device
         x = torch.cat([context_x, context_y], -1)
         # Size([B, C, input_dim])
-        x = self.enc_emb(self.enc_norm(x))
-        # Size([B, C, emb_dim])
+        x = self.enc_emb(self.enc_norm(x)).permute(1, 0, 2)
+        # Size([C, B, emb_dim])
         memory = self.encoder(x)
-        # Size([B, C, emb_dim])
-        target_x = self.dec_emb(self.dec_norm(target_x))
-        # Size([B, T, input_target_dim]) -> Size([B, T, emb_dim])
+        # Size([C, B, emb_dim])
+        target_x = self.dec_emb(self.dec_norm(target_x)).permute(1, 0, 2)
+        # Size([T, B, input_target_dim]) -> Size([B, T, emb_dim])
 
         # In transformers the memory and target_x need to be the same length. Lets use a permutation invariant agg on the context
         # Then expand it, so it's available as we decode, conditional on target_x
-        memory = memory.max(dim=1, keepdim=True)[0].expand_as(target_x)
+        memory = memory.max(dim=0, keepdim=True)[0].expand_as(target_x)
 
-        outputs = self.decoder(target_x, memory)
+        outputs = self.decoder(target_x, memory).permute(1, 0, 2).contiguous()
         # Size([B, T, emb_dim])
         mean = self.mean(outputs)
         log_sigma = self.std(outputs)
@@ -127,6 +127,10 @@ class TransformerSeq2SeqNet(nn.Module):
             # # Don't catch loss on context window
             # mean = mean[:, self.hparams.num_context:]
             # log_sigma = log_sigma[:, self.hparams.num_context:]
+
+            # Weight loss nearer to prediction time?
+            weight = (torch.arange(loss_p.shape[1])+1).float().to(device)[None, :]
+            loss_p = loss_p / torch.sqrt(weight) # We want to weight nearer stuff more
 
         y_pred = y_dist.rsample if self.training else y_dist.loc
         return y_pred, dict(loss_p=loss_p.mean(), loss_mse=loss_mse.mean()), dict(log_sigma=log_sigma, dist=y_dist)

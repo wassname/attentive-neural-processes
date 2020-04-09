@@ -102,6 +102,17 @@ def run_trial(
         print('KeyboardInterrupt, skipping rest of training')
         pass
 
+    # Plot
+    loader = model.val_dataloader()
+    dset_test = loader.dataset
+    label_names = dset_test.label_names
+    plot_from_loader(model.val_dataloader(), model, i=670, title='overfit val 670')
+    plt.show()
+    plot_from_loader(model.train_dataloader(), model, i=670, title='overfit train 670')
+    plt.show()
+    plot_from_loader(model.test_dataloader(), model, i=670, title='overfit test 670')
+    plt.show()
+
     # Load checkpoint
     checkpoints = sorted(Path(trainer.checkpoint_callback.dirpath).glob("*.ckpt"))
     if len(checkpoints):
@@ -110,16 +121,13 @@ def run_trial(
         print(f"Loading checkpoint {checkpoint}")
         model = model.load_from_checkpoint(checkpoint).to(device)
 
-    # Plot
-    loader = model.val_dataloader()
-    dset_test = loader.dataset
-    label_names = dset_test.label_names
-    plot_from_loader(model.val_dataloader(), model, i=670, title='val 670')
-    plt.show()
-    plot_from_loader(model.train_dataloader(), model, i=670, title='train 670')
-    plt.show()
-    plot_from_loader(model.test_dataloader(), model, i=670, title='test 670')
-    plt.show()
+        # Plot
+        plot_from_loader(model.val_dataloader(), model, i=670, title='val 670')
+        plt.show()
+        plot_from_loader(model.train_dataloader(), model, i=670, title='train 670')
+        plt.show()
+        plot_from_loader(model.test_dataloader(), model, i=670, title='test 670')
+        plt.show()
 
     try:
         trainer.test(model)
