@@ -8,9 +8,9 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torchvision.datasets import MNIST
 from test_tube import Experiment, HyperOptArgumentParser
-from src.data.smart_meter import collate_fns, SmartMeterDataSet, get_smartmeter_df
+from neural_processes.data.smart_meter import collate_fns, SmartMeterDataSet, get_smartmeter_df
 import torchvision.transforms as transforms
-from src.plot import plot_from_loader_to_tensor, plot_from_loader
+from neural_processes.plot import plot_from_loader_to_tensor, plot_from_loader
 from argparse import ArgumentParser
 import json
 import pytorch_lightning as pl
@@ -22,10 +22,11 @@ import PIL
 import optuna
 from torchvision.transforms import ToTensor
 
-from src.data.smart_meter import get_smartmeter_df
-from src.models.modules import BatchNormSequence
+from neural_processes.data.smart_meter import get_smartmeter_df
+from neural_processes.modules import BatchNormSequence
 
-from src.utils import ObjectDict
+from neural_processes.utils import ObjectDict
+from neural_processes.lightning import PL_Seq2Seq
 
 def log_prob_sigma(value, loc, log_scale):
     """A slightly more stable (not confirmed yet) log prob taking in log_var instead of scale.
@@ -136,138 +137,13 @@ class TransformerSeq2SeqNet(nn.Module):
         return y_pred, dict(loss_p=loss_p.mean(), loss_mse=loss_mse.mean()), dict(log_sigma=log_sigma, dist=y_dist)
 
 
-class TransformerSeq2Seq_PL(pl.LightningModule):
-    def __init__(self, hparams):
-        # TODO make label name configurable
-        # TODO make data source configurable
-        super().__init__()
-        self.hparams = ObjectDict()
-        self.hparams.update(
-            hparams.__dict__ if hasattr(hparams, "__dict__") else hparams
-        )
-        self.model = TransformerSeq2SeqNet(self.hparams)
-        self._dfs = None
+class TransformerSeq2Seq_PL(PL_Seq2Seq):
 
-    def forward(self, context_x, context_y, target_x, target_y):
-        return self.model(context_x, context_y, target_x, target_y)
-
-    def training_step(self, batch, batch_idx):
-        # REQUIRED
-        assert all(torch.isfinite(d).all() for d in batch)
-        context_x, context_y, target_x, target_y = batch
-        y_dist, losses, extra = self.forward(context_x, context_y, target_x, target_y)
-        loss = losses['loss_p'] # + loss_mse
-        tensorboard_logs = {
-            "train/loss": loss,
-            'train/loss_mse': losses['loss_mse'],
-            "train/loss_p": losses['loss_p'],
-            "train/sigma": torch.exp(extra['log_sigma']).mean()}
-        return {"loss": loss, "log": tensorboard_logs}
-
-    def validation_step(self, batch, batch_idx):
-        context_x, context_y, target_x, target_y = batch
-        assert all(torch.isfinite(d).all() for d in batch)
-        y_dist, losses, extra = self.forward(context_x, context_y, target_x, target_y)
-        loss = losses['loss_p'] # + loss_mse
-        tensorboard_logs = {
-            "val_loss": loss,
-            'val/loss_mse': losses['loss_mse'],
-            "val/loss_p": losses['loss_p'],
-            "val/sigma": torch.exp(extra['log_sigma']).mean()}
-        return {"val_loss": loss, "log": tensorboard_logs}
-
-    def validation_end(self, outputs):
-        if int(self.hparams["vis_i"]) > 0:
-            self.show_image()
-
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
-        keys = outputs[0]["log"].keys()
-        tensorboard_logs = {
-            k: torch.stack([x["log"][k] for x in outputs if k in x["log"]]).mean()
-            for k in keys
-        }
-        tensorboard_logs_str = {k: f"{v}" for k, v in tensorboard_logs.items()}
-        print(f"step {self.trainer.global_step}, {tensorboard_logs_str}")
-        assert torch.isfinite(avg_loss)
-        return {"avg_val_loss": avg_loss, "log": tensorboard_logs}
-
-
-    def show_image(self):        
-        # https://github.com/PytorchLightning/pytorch-lightning/blob/f8d9f8f/pytorch_lightning/core/lightning.py#L293
-        loader = self.val_dataloader()
-        vis_i = min(int(self.hparams["vis_i"]), len(loader.dataset))
-        # print('vis_i', vis_i)
-        if isinstance(self.hparams["vis_i"], str):
-            image = plot_from_loader(loader, self, i=int(vis_i))
-            plt.show()
-        else:
-            image = plot_from_loader_to_tensor(loader, self, i=vis_i)
-            self.logger.experiment.add_image('val/image', image, self.trainer.global_step)
-
-    def test_step(self, *args, **kwargs):
-        return self.validation_step(*args, **kwargs)
-
-    def test_end(self, *args, **kwargs):
-        return self.validation_end(*args, **kwargs)
-
-    def configure_optimizers(self):
-        optim = torch.optim.Adam(self.parameters(), lr=self.hparams["learning_rate"])
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optim, patience=self.hparams["patience"], verbose=True, min_lr=1e-7
-        )  # note early stopping has patience 3
-        return [optim], [scheduler]
-
-    def _get_cache_dfs(self):
-        if self._dfs is None:
-            df_train, df_val, df_test = get_smartmeter_df()
-            self._dfs = dict(df_train=df_train, df_val=df_val, df_test=df_test)
-        return self._dfs
-
-    @pl.data_loader
-    def train_dataloader(self):
-        df_train = self._get_cache_dfs()['df_train']
-        data_train = SmartMeterDataSet(
-            df_train, self.hparams["num_context"], self.hparams["num_extra_target"]
-        )
-        return torch.utils.data.DataLoader(
-            data_train,
-            batch_size=self.hparams["batch_size"],
-            shuffle=True,
-            collate_fn=collate_fns(
-                self.hparams["num_context"], self.hparams["num_extra_target"], sample=True, context_in_target=self.hparams["context_in_target"]
-            ),
-            num_workers=self.hparams["num_workers"],
-        )
-
-    @pl.data_loader
-    def val_dataloader(self):
-        df_test = self._get_cache_dfs()['df_val']
-        data_test = SmartMeterDataSet(
-            df_test, self.hparams["num_context"], self.hparams["num_extra_target"]
-        )
-        return torch.utils.data.DataLoader(
-            data_test,
-            batch_size=self.hparams["batch_size"],
-            shuffle=False,
-            collate_fn=collate_fns(
-                self.hparams["num_context"], self.hparams["num_extra_target"], sample=False, context_in_target=self.hparams["context_in_target"]
-            ),
-        )
-
-    @pl.data_loader
-    def test_dataloader(self):
-        df_test = self._get_cache_dfs()['df_test']
-        data_test = SmartMeterDataSet(
-            df_test, self.hparams["num_context"], self.hparams["num_extra_target"]
-        )
-        return torch.utils.data.DataLoader(
-            data_test,
-            batch_size=self.hparams["batch_size"],
-            shuffle=False,
-            collate_fn=collate_fns(
-                self.hparams["num_context"], self.hparams["num_extra_target"], sample=False, context_in_target=self.hparams["context_in_target"]
-            ),
-        )
+    def __init__(self, hparams,
+        MODEL_CLS=TransformerSeq2SeqNet, **kwargs):
+        super().__init__(hparams,
+        MODEL_CLS=MODEL_CLS, **kwargs)
+        self.default_args = {'agg': 'mean', 'attention_dropout': 0.12013231612195126, 'hidden_out_size_power': 4.0, 'hidden_size_power': 7.0, 'learning_rate': 0.0022924639229335475, 'nhead_power': 2.0, 'nlayers_power': 4.0}
 
     @staticmethod
     def add_suggest(trial: optuna.Trial):

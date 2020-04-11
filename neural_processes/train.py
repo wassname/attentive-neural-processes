@@ -8,6 +8,7 @@ import torch
 from .dict_logger import DictLogger
 from .utils import PyTorchLightningPruningCallback
 from .plot import plot_from_loader
+from .logger import logger
 
 
 def main(
@@ -89,10 +90,24 @@ def run_trial(
 ):
     print(f"now run `tensorboard --logdir {MODEL_DIR}`")
     (MODEL_DIR / name).mkdir(parents=True, exist_ok=True)
+
+    if getattr(PL_MODEL_CLS, 'default_args', None):
+        # add default args
+        params = {**PL_MODEL_CLS.default_args, **params}
+    else:
+        logger.warning(f"No default args on {PL_MODEL_CLS}")
+
+    # Make trial
     trial = optuna.trial.FixedTrial(params=params)
     trial = PL_MODEL_CLS.add_suggest(trial)
+
+    # Add auto number
     trial = add_number(trial, MODEL_DIR / name)
+
+    # Add user attributes
     trial._user_attrs.update(user_attrs)
+    print(trial)
+
     model, trainer = main(
         trial, PL_MODEL_CLS, name=name, MODEL_DIR=MODEL_DIR, train=False, prune=False
     )

@@ -12,16 +12,29 @@ import torchvision.transforms as transforms
 from argparse import ArgumentParser
 import json
 import pytorch_lightning as pl
+import math
 from matplotlib import pyplot as plt
 import torch
 import io
 import PIL
 from torchvision.transforms import ToTensor
 
-from src.data.smart_meter import get_smartmeter_df
+from neural_processes.data.smart_meter import get_smartmeter_df
 
-from src.utils import ObjectDict
+from neural_processes.utils import ObjectDict
+from torch.utils.data._utils.collate import default_collate
 
+def collate_fn(batch, sample=None):
+    return default_collate(batch)
+
+def log_prob_sigma(value, loc, log_scale):
+    """A slightly more stable (not confirmed yet) log prob taking in log_var instead of scale.
+    modified from https://github.com/pytorch/pytorch/blob/2431eac7c011afe42d4c22b8b3f46dedae65e7c0/torch/distributions/normal.py#L65
+    """
+    var = torch.exp(log_scale * 2)
+    return (
+        -((value - loc) ** 2) / (2 * var) - log_scale - math.log(math.sqrt(2 * math.pi))
+    )
 
 class SequenceDfDataSet(torch.utils.data.Dataset):
     def __init__(self, df, hparams, label_names=None, train=True, transforms=None):
@@ -70,9 +83,10 @@ class SequenceDfDataSet(torch.utils.data.Dataset):
 
 
 class LSTMNet(nn.Module):
-    def __init__(self, hparams):
+    def __init__(self, hparams, _min_std = 0.05):
         super().__init__()
         self.hparams = hparams
+        self._min_std = _min_std
 
         self.lstm1 = nn.LSTM(
             input_size=self.hparams.input_size,
@@ -86,16 +100,19 @@ class LSTMNet(nn.Module):
             self.hparams.hidden_size
             * (self.hparams.bidirectional + 1)
         )
-        self.linear = nn.Linear(self.hidden_out_size, 1)
+        self.mean = nn.Linear(self.hidden_out_size, 1)
+        self.std = nn.Linear(self.hidden_out_size, 1)
 
     def forward(self, x):
         outputs, (h_out, _) = self.lstm1(x)
         # outputs: [B, T, num_direction * H]
-        y = self.linear(outputs).squeeze(2)
-        return y
+        mean = self.mean(outputs).squeeze(2)
+        log_sigma = self.std(outputs).squeeze(2)
+        # log_sigma = torch.clamp(log_sigma, math.log(self._min_std), -math.log(self._min_std))
+        return mean, log_sigma
 
 
-class LSTM_PL(pl.LightningModule):
+class LSTM_PL_STD(pl.LightningModule):
     def __init__(self, hparams):
         # TODO make label name configurable
         # TODO make data source configurable
@@ -106,6 +123,10 @@ class LSTM_PL(pl.LightningModule):
         )
         self._model = LSTMNet(self.hparams)
         self._dfs = None
+        self._use_lvar = False
+        self._min_std = 0.005
+
+        self.default_args = {'bidirectional': False, 'hidden_size_power': 4, 'learning_rate': 0.0010825329363784934, 'lstm_dropout': 0.3905792111699782, 'lstm_layers': 4}
 
     def forward(self, x):
         return self._model(x)
@@ -113,20 +134,46 @@ class LSTM_PL(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         # REQUIRED
         x, y = batch
-        y_hat = self.forward(x)
+        mean, log_sigma = self.forward(x)
+
+        # Don't catch loss on context window
+        mean = mean[:, self.hparams.window_length:]
+        log_sigma = log_sigma[:, self.hparams.window_length:]
+        if self._use_lvar:
+            log_sigma = torch.clamp(log_sigma, math.log(self._min_std), -math.log(self._min_std))
+            sigma = torch.exp(log_sigma)
+        else:
+            sigma = self._min_std + (1 - self._min_std) * F.softplus(log_sigma)
+        y_dist = torch.distributions.Normal(mean, sigma)
+
         y = y[:, self.hparams.window_length:]
-        y_hat = y_hat[:, self.hparams.window_length:]
-        loss = F.mse_loss(y_hat, y)
-        tensorboard_logs = {"train_loss": loss}
+
+        loss_mse = F.mse_loss(mean, y).mean()
+        if self._use_lvar:
+            loss_p = -log_prob_sigma(y, mean, log_sigma).mean()
+        else:
+            loss_p = -y_dist.log_prob(y).mean()
+        loss = loss_p # + loss_mse
+        tensorboard_logs = {"train/loss": loss, 'train/loss_mse': loss_mse, "train/loss_p": loss_p, "train/sigma": sigma.mean()}
         return {"loss": loss, "log": tensorboard_logs}
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
-        y_hat = self.forward(x)
+        mean, log_sigma = self.forward(x)
+
+        # Don't catch loss on context window
+        mean = mean[:, self.hparams.window_length:]
+        log_sigma = log_sigma[:, self.hparams.window_length:]
+
+        sigma = torch.exp(log_sigma)
+        y_dist = torch.distributions.Normal(mean, sigma)
+
         y = y[:, self.hparams.window_length:]
-        y_hat = y_hat[:, self.hparams.window_length:]
-        loss = F.mse_loss(y_hat, y)
-        tensorboard_logs = {"val_loss": loss}
+
+        loss_mse = F.mse_loss(mean, y).mean()
+        loss_p = -log_prob_sigma(y, mean, log_sigma).mean()
+        loss = loss_p # + loss_mse
+        tensorboard_logs = {"val_loss": loss, 'val/loss':loss, 'val/loss_mse': loss_mse, "val/loss_p": loss_p, "val/sigma": sigma.mean()}
         return {"val_loss": loss, "log": tensorboard_logs}
 
     def validation_end(self, outputs):
@@ -135,10 +182,10 @@ class LSTM_PL(pl.LightningModule):
             loader = self.val_dataloader()
             vis_i = min(int(self.hparams["vis_i"]), len(loader.dataset))
         if isinstance(self.hparams["vis_i"], str):
-            image = plot_from_loader(loader, self, vis_i=vis_i, window_len=self.hparams["window_length"])
+            image = plot_from_loader(loader, self, i=vis_i)
             plt.show()
         else:
-            image = plot_from_loader_to_tensor(loader, self, vis_i=vis_i, window_len=self.hparams["window_length"])
+            image = plot_from_loader_to_tensor(loader, self, i=vis_i)
             self.logger.experiment.add_image(
                 "val/image", image, self.trainer.global_step
             )
@@ -173,7 +220,6 @@ class LSTM_PL(pl.LightningModule):
             self._dfs = dict(df_train=df_train, df_val=df_val, df_test=df_test)
         return self._dfs
 
-    @pl.data_loader
     def train_dataloader(self):
         df_train = self._get_cache_dfs()["df_train"]
         dset_train = SequenceDfDataSet(
@@ -187,10 +233,10 @@ class LSTM_PL(pl.LightningModule):
             dset_train,
             batch_size=self.hparams.batch_size,
             shuffle=True,
+            collate_fn=collate_fn,
             num_workers=self.hparams.num_workers,
         )
 
-    @pl.data_loader
     def val_dataloader(self):
         df_test = self._get_cache_dfs()["df_val"]
         dset_test = SequenceDfDataSet(
@@ -198,9 +244,10 @@ class LSTM_PL(pl.LightningModule):
             self.hparams,
             label_names=["energy(kWh/hh)"],
             train=False,
+            
             transforms=transforms.ToTensor(),
         )
-        return DataLoader(dset_test, batch_size=self.hparams.batch_size, shuffle=False)
+        return DataLoader(dset_test, batch_size=self.hparams.batch_size, shuffle=False,collate_fn=collate_fn,)
 
     @pl.data_loader
     def test_dataloader(self):
@@ -210,54 +257,43 @@ class LSTM_PL(pl.LightningModule):
             self.hparams,
             label_names=["energy(kWh/hh)"],
             train=False,
+            
             transforms=transforms.ToTensor(),
         )
-        return DataLoader(dset_test, batch_size=self.hparams.batch_size, shuffle=False)
+        return DataLoader(dset_test, batch_size=self.hparams.batch_size, shuffle=False, collate_fn=collate_fn,)
 
     @staticmethod
-    def add_suggest(trial: optuna.Trial):
-        """
-        Add hyperparam ranges to an optuna trial and typical user attrs.
-        
-        Usage:
-            trial = optuna.trial.FixedTrial(
-                params={         
-                    'hidden_size': 128,
-                }
-            )
-            trial = add_suggest(trial)
-            trainer = pl.Trainer()
-            model = LSTM_PL(dict(**trial.params, **trial.user_attrs), dataset_train,
-                            dataset_test, cache_base_path, norm)
-            trainer.fit(model)
-        """
-        trial.suggest_loguniform("learning_rate", 1e-6, 1e-2)
+    def add_suggest(trial):
+        trial.suggest_loguniform("learning_rate", 1e-5, 1e-2)
         trial.suggest_uniform("lstm_dropout", 0, 0.75)
-        trial.suggest_categorical(
-            "hidden_size", [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
-        )
-        trial.suggest_categorical("lstm_layers", [1, 2, 3, 4, 6,  8])
+        trial.suggest_categorical("hidden_size", [1, 2, 4, 8, 16, 32, 64, 128, 256, 512])    
+        trial.suggest_categorical("lstm_layers", [1, 2, 4, 8])
         trial.suggest_categorical("bidirectional", [False, True])
-
+        
+        # constants
         trial._user_attrs = {
-            "batch_size": 16,
-            "grad_clip": 40,
-            "max_nb_epochs": 200,
-            "num_workers": 4,
-            "vis_i": 670,
-            "input_size": 6,
-            "output_size": 1,
-            "patience": 2,
+            'batch_size': 16,
+            'grad_clip': 40,
+            'max_nb_epochs': 200,
+            'num_workers': 4,
+            'num_extra_target': 24*4,
+            'vis_i': '670',
+            'num_context': 24*4,
+            'input_size': 18,
+            'input_size_decoder': 17,
+            'context_in_target': True,
+            'output_size': 1,
+            'patience': 3,
         }
         return trial
 
 
-def plot_from_loader(loader, model, vis_i=670, n=1, window_len=0):
+def plot_from_loader(loader, model, title='', i=670, n=1, window_len=0):
     dset_test = loader.dataset
     label_names = dset_test.label_names
     y_trues = []
     y_preds = []
-    vis_i = min(vis_i, len(dset_test))
+    vis_i = min(i, len(dset_test))
     for i in tqdm(range(vis_i, vis_i + n)):
         x_rows, y_rows = dset_test.iloc(i)
         x, y = dset_test[i]
@@ -265,23 +301,49 @@ def plot_from_loader(loader, model, vis_i=670, n=1, window_len=0):
         x = x[None, :].to(device)
         model.eval()
         with torch.no_grad():
-            y_hat = model.forward(x)
+            y_hat, log_sigma = model.forward(x)
             y_hat = y_hat.cpu().squeeze(0).numpy()
+            sigma = log_sigma.exp().cpu().squeeze(0).numpy()
 
         dt = y_rows.iloc[0].name
 
         y_hat_rows = y_rows.copy()
         y_hat_rows[label_names[0]] = y_hat
+        y_hat_rows['sigma'] = sigma
         y_trues.append(y_rows)
         y_preds.append(y_hat_rows)
 
+    df_trues = pd.concat(y_trues)
+    df_preds = pd.concat(y_preds)
+
     plt.figure()
-    pd.concat(y_trues)[label_names[0]].plot(label="y_true")
+    df_trues[label_names[0]].plot(label="y_true", style="k:")
     ylims = plt.ylim()
-    pd.concat(y_preds)[label_names[0]][window_len:].plot(label="y_pred")
+    df_preds[label_names[0]][window_len:].plot(label="y_pred", style="b", linewidth=2,)
+
+    std = df_preds['sigma'][window_len:]
+    mean = df_preds[label_names[0]][window_len:]
+    plt.fill_between(
+        df_preds.index[window_len:],
+        mean - std,
+        mean + std,
+        alpha=0.25,
+        facecolor="blue",
+        interpolate=True,
+        label="uncertainty",
+    )
+    plt.fill_between(
+        df_preds.index[window_len:],
+        mean - std * 2,
+        mean + std * 2,
+        alpha=0.125,
+        facecolor="blue",
+        interpolate=True,
+        label="uncertainty",
+    )
     plt.legend()
     t_ahead = pd.Timedelta("30T") * model.hparams.target_length
-    plt.title(f"predicting {t_ahead} ahead")
+    plt.title(f"predicting {t_ahead} ahead. {title}")
     plt.ylim(*ylims)
     # plt.show()
 
