@@ -55,28 +55,63 @@ class PyTorchLightningPruningCallback(EarlyStopping):
             raise optuna.exceptions.TrialPruned(message)
 
 
+# class ObjectDict(dict):
+#     """
+#     Interface similar to an argparser
+#     """
+
+#     def __init__(self):
+#         pass
+
+#     def __setattr__(self, attr, value):
+#         self[attr] = value
+#         return self[attr]
+
+#     def __getattr__(self, attr):
+#         if attr.startswith("_"):
+#             # https://stackoverflow.com/questions/10364332/how-to-pickle-python-object-derived-from-dict
+#             raise AttributeError
+#         try:
+#             return super().__getitem__(attr)
+#         except KeyError:
+#             # cPickle expects __getattr__ to raise AttributeError, not KeyError.
+#             raise AttributeError(self._KeyErrorString(name))
+
+#     @property
+#     def __dict__(self):
+#         return dict(self)
+
 class ObjectDict(dict):
     """
-    Interface similar to an argparser
+    easy way to represent (hyper)parameters.
+
+    https://stackoverflow.com/a/50613966/221742
     """
+    __getattr__ = dict.__getitem__
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
 
-    def __init__(self):
-        pass
+    def __getstate__(self):
+        return self
 
-    def __setattr__(self, attr, value):
-        self[attr] = value
-        return self[attr]
+    def __setstate__(self, state):
+        self.update(state)
 
-    def __getattr__(self, attr):
-        if attr.startswith("_"):
-            # https://stackoverflow.com/questions/10364332/how-to-pickle-python-object-derived-from-dict
-            raise AttributeError
-        return dict(self)[attr]
+    def copy(self, **extra_params):
+        return ObjectDict(**self, **extra_params)
 
-    @property
-    def __dict__(self):
-        return dict(self)
 
+def hparams_power(hparams):
+    """Some value we want to go up in powers of 2
+    
+    So any hyper param that ends in power will be used this way.
+    """
+    hparams_old = hparams.copy()
+    for k in hparams_old.keys():
+        if k.endswith("_power"):
+            k_new = k.replace("_power", "")
+            hparams[k_new] = int(2 ** hparams[k])
+    return hparams
 
 def log_prob_sigma(value, loc, log_scale):
     """A slightly more stable (not confirmed yet) log prob taking in log_var instead of scale.

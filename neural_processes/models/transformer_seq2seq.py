@@ -27,10 +27,13 @@ from neural_processes.modules import BatchNormSequence
 
 from neural_processes.utils import ObjectDict
 from neural_processes.lightning import PL_Seq2Seq
+from ..logger import logger
+from ..utils import hparams_power
 
 class TransformerSeq2SeqNet(nn.Module):
     def __init__(self, hparams, _min_std = 0.05):
         super().__init__()
+        hparams = hparams_power(hparams)
         self.hparams = hparams
         self._min_std = _min_std
 
@@ -134,7 +137,7 @@ class TransformerSeq2Seq_PL(PL_Seq2Seq):
         super().__init__(hparams,
         MODEL_CLS=MODEL_CLS, **kwargs)
     
-    DEFAULT_ARGS = {'agg': 'mean', 'attention_dropout': 0.12013231612195126, 'hidden_out_size_power': 4.0, 'hidden_size_power': 7.0, 'learning_rate': 0.0022924639229335475, 'nhead_power': 2.0, 'nlayers_power': 4.0}
+    DEFAULT_ARGS = {'agg': 'mean', 'attention_dropout': 0.12, 'hidden_out_size_power': 4, 'hidden_size_power': 7, 'learning_rate': 0.0023, 'nhead_power': 2, 'nlayers_power': 4}
 
     @staticmethod
     def add_suggest(trial: optuna.Trial):
@@ -155,10 +158,12 @@ class TransformerSeq2Seq_PL(PL_Seq2Seq):
         """
         trial.suggest_loguniform("learning_rate", 1e-6, 1e-2)
         trial.suggest_uniform("attention_dropout", 0, 0.75)
-        trial.suggest_categorical("hidden_size", [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048])    
-        trial.suggest_categorical("hidden_out_size", [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048])    
-        trial.suggest_categorical("nlayers", [1, 2, 4, 6, 8, 16, 32])
-        trial.suggest_categorical("nhead", [1, 2, 8, 16])
+        trial.suggest_discrete_uniform(
+            "hidden_size_power", 2, 10, 1
+        ) 
+        trial.suggest_discrete_uniform("hidden_out_size_power", 2, 9, 1) 
+        trial.suggest_discrete_uniform("nhead_power", 1, 4, 1)
+        trial.suggest_int("nlayers", 1, 12)
 
         trial._user_attrs = {
             'batch_size': 16,
@@ -170,7 +175,7 @@ class TransformerSeq2Seq_PL(PL_Seq2Seq):
             'num_context': 24*4,
             'input_size': 18,
             'input_size_decoder': 17,
-            'context_in_target': True,
+            'context_in_target': False,
             'output_size': 1,
             'patience': 3,
         }

@@ -21,14 +21,14 @@ class PL_NeuralProcess(PL_Seq2Seq):
         'det_enc_cross_attn_type': 'multihead',
         'det_enc_self_attn_type': 'uniform',
         'dropout': 0,
-        'hidden_dim': 128,
-        'latent_dim': 128,
+        'hidden_dim_power': 7,
+        'latent_dim_power': 7,
         'latent_enc_self_attn_type': 'uniform',
         'learning_rate': 0.002,
         'n_decoder_layers': 4,
         'n_det_encoder_layers': 4,
-        'n_latent_encoder_layers': 2,
-        'num_heads': 8,
+        'n_latent_encoder_layers_power': 1,
+        'num_heads_power': 3,
         'use_deterministic_path': True,
         'use_lvar': True,
         'use_self_attn': True,
@@ -37,16 +37,23 @@ class PL_NeuralProcess(PL_Seq2Seq):
 
     @staticmethod
     def add_suggest(trial):        
-        trial.suggest_loguniform("learning_rate", 1e-5, 1e-2)
-
-        trial.suggest_categorical("hidden_dim", [8*2**i for i in range(8)])
-        trial.suggest_categorical("latent_dim", [8*2**i for i in range(8)])
-        
+        trial.suggest_loguniform("learning_rate", 1e-6, 1e-2)
         trial.suggest_int("attention_layers", 1, 4)
-        trial.suggest_categorical("n_latent_encoder_layers", [1, 2, 4, 6, 8, 12])
-        trial.suggest_categorical("n_det_encoder_layers", [1, 2, 4, 6, 8, 12])
-        trial.suggest_categorical("n_decoder_layers", [1, 2, 4, 6, 8, 12])
-        trial.suggest_int("num_heads", 8, 8)
+        trial.suggest_discrete_uniform("num_heads_power", 2, 4, 1)
+
+        trial.suggest_discrete_uniform(
+            "hidden_dim_power", 3, 11, 1
+        )
+        trial.suggest_discrete_uniform(
+            "latent_dim_power", 3, 11, 1
+        )
+        trial.suggest_int(
+            "n_latent_encoder_layers", 1, 11
+        )
+
+        trial.suggest_int("n_latent_encoder_layers", 1, 12)
+        trial.suggest_int("n_det_encoder_layers", 1, 12)
+        trial.suggest_int("n_decoder_layers", 1, 12)
 
         trial.suggest_uniform("dropout", 0, 0.9)
         trial.suggest_uniform("attention_dropout", 0, 0.9)
@@ -72,7 +79,7 @@ class PL_NeuralProcess(PL_Seq2Seq):
             'vis_i': '670',
             'num_extra_target': 24*4,
             'x_dim': 18,
-            'context_in_target': True,
+            'context_in_target': False,
             'y_dim': 1,
             'patience': 3,
             'min_std': 0.005,

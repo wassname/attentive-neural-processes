@@ -6,7 +6,7 @@ import math
 
 from neural_processes.modules import BatchNormSequence, BatchMLP, Attention, LSTMBlock
 from neural_processes.utils import kl_loss_var, log_prob_sigma
-
+from neural_processes.utils import hparams_power
 
 class LatentEncoder(nn.Module):
     def __init__(
@@ -195,6 +195,7 @@ class NeuralProcess(nn.Module):
 
     @staticmethod
     def FROM_HPARAMS(hparams):
+        hparams = hparams_power(hparams)
         return NeuralProcess(**hparams)
     
     def __init__(self,

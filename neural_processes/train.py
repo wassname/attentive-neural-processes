@@ -106,7 +106,7 @@ def run_trial(
 
     # Add user attributes
     trial._user_attrs.update(user_attrs)
-    print('trial', trial)
+    print('trial', trial, trial.params, trial.user_attrs)
 
     model, trainer = main(
         trial, PL_MODEL_CLS, name=name, MODEL_DIR=MODEL_DIR, train=False, prune=False

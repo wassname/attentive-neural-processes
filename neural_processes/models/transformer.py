@@ -9,15 +9,15 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
 from neural_processes.lightning import PL_Seq2Seq
+from ..logger import logger
 
 class NetTransformer(nn.Module):
     def __init__(self, hparams):
         super().__init__()
-        hparams["nlayers"] = int(2 ** hparams["nlayers_power"])
-        hparams["hidden_size"] = int(2**hparams["hidden_size_power"])
-        hparams["hidden_out_size"] = int(2 ** hparams["hidden_out_size_power"])
-        hparams["nhead"] = int(2 ** hparams["nhead_power"])
-        logger.debug(f"{type(self)} hparams {hparams}")
+        for k in hparams.keys():
+            if k.endswith("_power"):
+                k_new = k.replace("_power", "")
+                hparams[k_new] = int(2 ** hparams[k])
         self.hparams = hparams
 
         hidden_out_size = self.hparams.hidden_out_size
@@ -148,7 +148,7 @@ class PL_Transformer(PL_Seq2Seq):
         )
         trial.suggest_discrete_uniform("hidden_out_size_power", 2, 9, 1)
         trial.suggest_discrete_uniform("nhead_power", 1, 4, 1)
-        trial.suggest_discrete_uniform("nlayers_power", 1, 5, 1)      
+        trial.suggest_int("nlayers_power", 1, 12)      
 
         user_attrs_default = {
             "batch_size": 16,
@@ -159,6 +159,9 @@ class PL_Transformer(PL_Seq2Seq):
             "input_size": 6,
             "output_size": 1,
             "label_steps": 24,
+            "nan_value": -99.9,
+            'context_in_target': False,
+            'patience': 3,
         }
         [trial.set_user_attr(k, v) for k, v in user_attrs_default.items()]
         [trial.set_user_attr(k, v) for k, v in user_attrs.items()]
