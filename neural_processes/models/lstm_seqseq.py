@@ -143,6 +143,7 @@ class LSTMSeq2Seq_PL(PL_Seq2Seq):
         "learning_rate": 0.001,
         "lstm_layers": 4,
         'bidirectional': False
+        
     }
 
     @staticmethod
@@ -165,5 +166,6 @@ class LSTMSeq2Seq_PL(PL_Seq2Seq):
             "input_size_decoder": 17,
             "context_in_target": False,
             "output_size": 1,
+            'min_std': 0.005,
         }
         return trial

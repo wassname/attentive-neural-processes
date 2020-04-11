@@ -36,11 +36,11 @@ from ..utils import hparams_power
 
 
 class TransformerSeq2SeqNet(nn.Module):
-    def __init__(self, hparams, _min_std=0.05):
+    def __init__(self, hparams):
         super().__init__()
         hparams = hparams_power(hparams)
         self.hparams = hparams
-        self._min_std = _min_std
+        self._min_std = hparams.min_std
 
         hidden_out_size = self.hparams.hidden_out_size
         self.enc_norm = BatchNormSequence(self.hparams.input_size)
@@ -187,5 +187,6 @@ class TransformerSeq2Seq_PL(PL_Seq2Seq):
             "context_in_target": False,
             "output_size": 1,
             "patience": 3,
+            'min_std': 0.005,
         }
         return trial
