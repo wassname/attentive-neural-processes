@@ -28,16 +28,6 @@ from neural_processes.modules import BatchNormSequence
 from neural_processes.utils import ObjectDict
 from neural_processes.lightning import PL_Seq2Seq
 
-def log_prob_sigma(value, loc, log_scale):
-    """A slightly more stable (not confirmed yet) log prob taking in log_var instead of scale.
-    modified from https://github.com/pytorch/pytorch/blob/2431eac7c011afe42d4c22b8b3f46dedae65e7c0/torch/distributions/normal.py#L65
-    """
-    var = torch.exp(log_scale * 2)
-    return (
-        -((value - loc) ** 2) / (2 * var) - log_scale - math.log(math.sqrt(2 * math.pi))
-    )
-
-
 class TransformerSeq2SeqNet(nn.Module):
     def __init__(self, hparams, _min_std = 0.05):
         super().__init__()
@@ -143,7 +133,8 @@ class TransformerSeq2Seq_PL(PL_Seq2Seq):
         MODEL_CLS=TransformerSeq2SeqNet, **kwargs):
         super().__init__(hparams,
         MODEL_CLS=MODEL_CLS, **kwargs)
-        self.default_args = {'agg': 'mean', 'attention_dropout': 0.12013231612195126, 'hidden_out_size_power': 4.0, 'hidden_size_power': 7.0, 'learning_rate': 0.0022924639229335475, 'nhead_power': 2.0, 'nlayers_power': 4.0}
+    
+    DEFAULT_ARGS = {'agg': 'mean', 'attention_dropout': 0.12013231612195126, 'hidden_out_size_power': 4.0, 'hidden_size_power': 7.0, 'learning_rate': 0.0022924639229335475, 'nhead_power': 2.0, 'nlayers_power': 4.0}
 
     @staticmethod
     def add_suggest(trial: optuna.Trial):

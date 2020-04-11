@@ -119,6 +119,8 @@ class LSTMSeq2Seq_PL(PL_Seq2Seq):
         MODEL_CLS=Seq2SeqNet, **kwargs):
         super().__init__(hparams,
         MODEL_CLS=MODEL_CLS, **kwargs)
+
+    DEFAULT_ARGS = {'agg': 'mean', 'lstm_dropout': 0.12013231612195126, 'hidden_out_size_power': 4.0, 'hidden_size_power': 7.0, 'learning_rate': 0.0022924639229335475, 'nhead_power': 2.0, 'nlayers_power': 4.0}
     
     @staticmethod
     def add_suggest(trial):

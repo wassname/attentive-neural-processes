@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
 import math
 
-from neural_processes.modules import BatchNormSequence
+from neural_processes.modules import BatchNormSequence, BatchMLP, Attention, LSTMBlock
 from neural_processes.utils import kl_loss_var, log_prob_sigma
 
 
@@ -192,6 +192,11 @@ class Decoder(nn.Module):
 
 
 class NeuralProcess(nn.Module):
+
+    @staticmethod
+    def FROM_HPARAMS(hparams):
+        return NeuralProcess(**hparams)
+    
     def __init__(self,
                  x_dim, # features in input
                  y_dim, # number of features in output
@@ -350,6 +355,8 @@ class NeuralProcess(nn.Module):
             mse_loss = F.mse_loss(dist.loc, target_y, reduction='none')[:,:context_x.size(1)].mean()
             loss_p = -log_p.mean()
             loss = (loss_kl - log_p).mean()
+            loss_kl = loss_kl.mean()
+            log_p = log_p.mean()
 
         else:
             loss_p = None

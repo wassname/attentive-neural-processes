@@ -5,12 +5,12 @@ from argparse import ArgumentParser
 from test_tube import Experiment, HyperOptArgumentParser
 from .model import NeuralProcess
 from neural_processes.lightning import PL_Seq2Seq
-
+from neural_processes.utils import ObjectDict
 
 
 class PL_NeuralProcess(PL_Seq2Seq):
     def __init__(self, hparams,
-        MODEL_CLS=NeuralProcess, **kwargs):
+        MODEL_CLS=NeuralProcess.FROM_HPARAMS, **kwargs):
         super().__init__(hparams,
         MODEL_CLS=MODEL_CLS, **kwargs)
 

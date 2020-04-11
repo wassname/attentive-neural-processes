@@ -1,15 +1,13 @@
 import pytorch_lightning as pl
 import torch
-import optuna
-import torch
 from torch import nn
-from pathlib import Path
-from pytorch_lightning.callbacks import EarlyStopping
-from optuna.integration.pytorch_lightning import _check_pytorch_lightning_availability
 import torch.nn.functional as F
+from matplotlib import pyplot as plt
+
 from .utils import ObjectDict
-from .data.smart_meter import get_smartmeter_df
+from .data.smart_meter import get_smartmeter_df, SmartMeterDataSet, collate_fns
 from .logger import logger
+from .plot import plot_from_loader
 
 
 class PL_Seq2Seq(pl.LightningModule):

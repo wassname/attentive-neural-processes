@@ -91,9 +91,9 @@ def run_trial(
     print(f"now run `tensorboard --logdir {MODEL_DIR}`")
     (MODEL_DIR / name).mkdir(parents=True, exist_ok=True)
 
-    if getattr(PL_MODEL_CLS, 'default_args', None):
+    if getattr(PL_MODEL_CLS, 'DEFAULT_ARGS', None):
         # add default args
-        params = {**PL_MODEL_CLS.default_args, **params}
+        params = {**PL_MODEL_CLS.DEFAULT_ARGS, **params}
     else:
         logger.warning(f"No default args on {PL_MODEL_CLS}")
 
@@ -106,7 +106,7 @@ def run_trial(
 
     # Add user attributes
     trial._user_attrs.update(user_attrs)
-    print(trial)
+    print('trial', trial)
 
     model, trainer = main(
         trial, PL_MODEL_CLS, name=name, MODEL_DIR=MODEL_DIR, train=False, prune=False

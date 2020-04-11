@@ -122,7 +122,7 @@ class PL_Transformer(PL_Seq2Seq):
         super().__init__(hparams,
         MODEL_CLS=MODEL_CLS, **kwargs)
 
-        self.default_args = {'attention_dropout': 0.4151003234623061, 'hidden_out_size_power': 2.0, 'hidden_size_power': 2.0, 'learning_rate': 0.0026738884132767185, 'nhead_power': 1.0, 'nlayers_power': 1.0}
+    DEFAULT_ARGS = {'attention_dropout': 0.4151003234623061, 'hidden_out_size_power': 2.0, 'hidden_size_power': 2.0, 'learning_rate': 0.0026738884132767185, 'nhead_power': 1.0, 'nlayers_power': 1.0}
 
     @staticmethod
     def add_suggest(trial: optuna.Trial, user_attrs={}):

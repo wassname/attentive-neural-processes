@@ -2,6 +2,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+from .modules import BatchMLP
 
 class AttnLinear(nn.Module):
     def __init__(self, in_channels, out_channels):
