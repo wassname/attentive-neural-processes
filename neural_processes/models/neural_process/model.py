@@ -3,6 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
 import math
+import numpy as np
 
 from neural_processes.modules import BatchNormSequence, BatchMLP, Attention, LSTMBlock
 from neural_processes.utils import kl_loss_var, log_prob_sigma

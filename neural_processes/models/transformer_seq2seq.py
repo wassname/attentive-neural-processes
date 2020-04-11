@@ -8,7 +8,11 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torchvision.datasets import MNIST
 from test_tube import Experiment, HyperOptArgumentParser
-from neural_processes.data.smart_meter import collate_fns, SmartMeterDataSet, get_smartmeter_df
+from neural_processes.data.smart_meter import (
+    collate_fns,
+    SmartMeterDataSet,
+    get_smartmeter_df,
+)
 import torchvision.transforms as transforms
 from neural_processes.plot import plot_from_loader_to_tensor, plot_from_loader
 from argparse import ArgumentParser
@@ -30,8 +34,9 @@ from neural_processes.lightning import PL_Seq2Seq
 from ..logger import logger
 from ..utils import hparams_power
 
+
 class TransformerSeq2SeqNet(nn.Module):
-    def __init__(self, hparams, _min_std = 0.05):
+    def __init__(self, hparams, _min_std=0.05):
         super().__init__()
         hparams = hparams_power(hparams)
         self.hparams = hparams
@@ -49,9 +54,7 @@ class TransformerSeq2SeqNet(nn.Module):
             # activation
         )
         self.encoder = nn.TransformerEncoder(
-            layer_enc,
-            num_layers=self.hparams.nlayers,
-            norm=encoder_norm
+            layer_enc, num_layers=self.hparams.nlayers, norm=encoder_norm
         )
 
         self.dec_norm = BatchNormSequence(self.hparams.input_size_decoder)
@@ -64,15 +67,12 @@ class TransformerSeq2SeqNet(nn.Module):
         )
         decoder_norm = nn.LayerNorm(hidden_out_size)
         self.decoder = nn.TransformerDecoder(
-            layer_dec,
-            num_layers=self.hparams.nlayers,
-            norm=decoder_norm
+            layer_dec, num_layers=self.hparams.nlayers, norm=decoder_norm
         )
         self.mean = nn.Linear(hidden_out_size, self.hparams.output_size)
         self.std = nn.Linear(hidden_out_size, self.hparams.output_size)
         self._use_lvar = False
         # self._reset_parameters()
-
 
     def _reset_parameters(self):
         r"""Initiate parameters in the transformer model."""
@@ -101,43 +101,54 @@ class TransformerSeq2SeqNet(nn.Module):
         mean = self.mean(outputs)
         log_sigma = self.std(outputs)
         if self._use_lvar:
-            log_sigma = torch.clamp(log_sigma, math.log(self._min_std), -math.log(self._min_std))
+            log_sigma = torch.clamp(
+                log_sigma, math.log(self._min_std), -math.log(self._min_std)
+            )
             sigma = torch.exp(log_sigma)
         else:
             sigma = self._min_std + (1 - self._min_std) * F.softplus(log_sigma)
         y_dist = torch.distributions.Normal(mean, sigma)
-        
+
         # Loss
         loss_mse = loss_p = None
         if target_y is not None:
-            loss_mse = F.mse_loss(mean, target_y, reduction='none')
+            loss_mse = F.mse_loss(mean, target_y, reduction="none")
             if self._use_lvar:
                 loss_p = -log_prob_sigma(target_y, mean, log_sigma)
             else:
                 loss_p = -y_dist.log_prob(target_y).mean(-1)
             if self.hparams["context_in_target"]:
-                loss_p[:context_x.size(1)] /= 100
-                loss_mse[:context_x.size(1)] /= 100
+                loss_p[: context_x.size(1)] /= 100
+                loss_mse[: context_x.size(1)] /= 100
             # # Don't catch loss on context window
             # mean = mean[:, self.hparams.num_context:]
             # log_sigma = log_sigma[:, self.hparams.num_context:]
 
             # Weight loss nearer to prediction time?
-            weight = (torch.arange(loss_p.shape[1])+1).float().to(device)[None, :]
-            loss_p = loss_p / torch.sqrt(weight) # We want to weight nearer stuff more
+            weight = (torch.arange(loss_p.shape[1]) + 1).float().to(device)[None, :]
+            loss_p = loss_p / torch.sqrt(weight)  # We want to weight nearer stuff more
 
         y_pred = y_dist.rsample if self.training else y_dist.loc
-        return y_pred, dict(loss_p=loss_p.mean(), loss_mse=loss_mse.mean()), dict(log_sigma=log_sigma, dist=y_dist)
+        return (
+            y_pred,
+            dict(loss_p=loss_p.mean(), loss_mse=loss_mse.mean()),
+            dict(log_sigma=log_sigma, dist=y_dist),
+        )
 
 
 class TransformerSeq2Seq_PL(PL_Seq2Seq):
+    def __init__(self, hparams, MODEL_CLS=TransformerSeq2SeqNet, **kwargs):
+        super().__init__(hparams, MODEL_CLS=MODEL_CLS, **kwargs)
 
-    def __init__(self, hparams,
-        MODEL_CLS=TransformerSeq2SeqNet, **kwargs):
-        super().__init__(hparams,
-        MODEL_CLS=MODEL_CLS, **kwargs)
-    
-    DEFAULT_ARGS = {'agg': 'mean', 'attention_dropout': 0.12, 'hidden_out_size_power': 4, 'hidden_size_power': 7, 'learning_rate': 0.0023, 'nhead_power': 2, 'nlayers_power': 4}
+    DEFAULT_ARGS = {
+        "agg": "mean",
+        "attention_dropout": 0.12,
+        "hidden_out_size_power": 4,
+        "hidden_size_power": 7,
+        "learning_rate": 0.0023,
+        "nhead_power": 2,
+        "nlayers": 4,
+    }
 
     @staticmethod
     def add_suggest(trial: optuna.Trial):
@@ -158,25 +169,23 @@ class TransformerSeq2Seq_PL(PL_Seq2Seq):
         """
         trial.suggest_loguniform("learning_rate", 1e-6, 1e-2)
         trial.suggest_uniform("attention_dropout", 0, 0.75)
-        trial.suggest_discrete_uniform(
-            "hidden_size_power", 2, 10, 1
-        ) 
-        trial.suggest_discrete_uniform("hidden_out_size_power", 2, 9, 1) 
+        trial.suggest_discrete_uniform("hidden_size_power", 2, 10, 1)
+        trial.suggest_discrete_uniform("hidden_out_size_power", 2, 9, 1)
         trial.suggest_discrete_uniform("nhead_power", 1, 4, 1)
         trial.suggest_int("nlayers", 1, 12)
 
         trial._user_attrs = {
-            'batch_size': 16,
-            'grad_clip': 40,
-            'max_nb_epochs': 200,
-            'num_workers': 4,
-            'num_extra_target': 24*4,
-            'vis_i': '670',
-            'num_context': 24*4,
-            'input_size': 18,
-            'input_size_decoder': 17,
-            'context_in_target': False,
-            'output_size': 1,
-            'patience': 3,
+            "batch_size": 16,
+            "grad_clip": 40,
+            "max_nb_epochs": 200,
+            "num_workers": 4,
+            "num_extra_target": 24 * 4,
+            "vis_i": "670",
+            "num_context": 24 * 4,
+            "input_size": 18,
+            "input_size_decoder": 17,
+            "context_in_target": False,
+            "output_size": 1,
+            "patience": 3,
         }
         return trial

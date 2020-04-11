@@ -27,7 +27,7 @@ class PL_NeuralProcess(PL_Seq2Seq):
         'learning_rate': 0.002,
         'n_decoder_layers': 4,
         'n_det_encoder_layers': 4,
-        'n_latent_encoder_layers_power': 1,
+        'n_latent_encoder_layers': 2,
         'num_heads_power': 3,
         'use_deterministic_path': True,
         'use_lvar': True,

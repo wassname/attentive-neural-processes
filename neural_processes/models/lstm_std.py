@@ -36,7 +36,7 @@ class LSTMNet(nn.Module):
         self._min_std = _min_std
 
         self.lstm1 = nn.LSTM(
-            input_size=self.hparams.input_size,
+            x_dim=self.hparams.x_dim,
             hidden_size=self.hparams.hidden_size,
             batch_first=True,
             num_layers=self.hparams.lstm_layers,
@@ -50,6 +50,7 @@ class LSTMNet(nn.Module):
         self.std = nn.Linear(self.hidden_out_size, 1)
 
     def forward(self, context_x, context_y, target_x, target_y=None):
+        loss_scale = 1
         device = next(self.parameters()).device
         x = torch.cat([context_x, context_y], -1).detach()
 
@@ -99,13 +100,12 @@ class LSTM_PL_STD(PL_Seq2Seq):
             "grad_clip": 40,
             "max_nb_epochs": 200,
             "num_workers": 4,
-            "num_extra_target": 24 * 4,
+            # "num_extra_target": 24 * 4,
             "vis_i": "670",
-            "num_context": 24 * 4,
-            "input_size": 18,
-            "input_size_decoder": 17,
+            # "num_context": 24 * 4,
+            "x_dim": 18,
             "context_in_target": False,
-            "output_size": 1,
+            # "output_size": 1,
             "patience": 3,
         }
         return trial
