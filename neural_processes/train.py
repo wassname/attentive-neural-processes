@@ -87,6 +87,7 @@ def run_trial(
     user_attrs: dict = {},
     MODEL_DIR: Path = Path("./lightning_logs"),
     plot_from_loader=plot_from_loader,
+    number=None,
 ):
     print(f"now run `tensorboard --logdir {MODEL_DIR}`")
     (MODEL_DIR / name).mkdir(parents=True, exist_ok=True)
@@ -101,32 +102,35 @@ def run_trial(
     trial = optuna.trial.FixedTrial(params=params)
     trial = PL_MODEL_CLS.add_suggest(trial)
 
-    # Add auto number
-    trial = add_number(trial, MODEL_DIR / name)
+    if number is None:
+        trial = add_number(trial, MODEL_DIR / name)
+    else:
+        trial.number = number
 
     # Add user attributes
     trial._user_attrs.update(user_attrs)
-    print('trial', trial, trial.params, trial.user_attrs)
+    print('trial', trial.number, trial, trial.params, trial.user_attrs)
 
     model, trainer = main(
         trial, PL_MODEL_CLS, name=name, MODEL_DIR=MODEL_DIR, train=False, prune=False
     )
-    try:
-        trainer.fit(model)
-    except KeyboardInterrupt:
-        print('KeyboardInterrupt, skipping rest of training')
-        pass
+    if number is None:
+        try:
+            trainer.fit(model)
+        except KeyboardInterrupt:
+            print('KeyboardInterrupt, skipping rest of training')
+            pass
 
-    # Plot
-    loader = model.val_dataloader()
-    dset_test = loader.dataset
-    label_names = dset_test.label_names
-    plot_from_loader(model.val_dataloader(), model, i=670, title='overfit val 670')
-    plt.show()
-    plot_from_loader(model.train_dataloader(), model, i=670, title='overfit train 670')
-    plt.show()
-    plot_from_loader(model.test_dataloader(), model, i=670, title='overfit test 670')
-    plt.show()
+        # Plot
+        loader = model.val_dataloader()
+        dset_test = loader.dataset
+        label_names = dset_test.label_names
+        plot_from_loader(model.val_dataloader(), model, i=670, title='overfit val 670')
+        plt.show()
+        plot_from_loader(model.train_dataloader(), model, i=670, title='overfit train 670')
+        plt.show()
+        plot_from_loader(model.test_dataloader(), model, i=670, title='overfit test 670')
+        plt.show()
 
     # Load checkpoint
     checkpoints = sorted(Path(trainer.checkpoint_callback.dirpath).glob("*.ckpt"))

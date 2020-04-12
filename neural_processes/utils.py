@@ -13,7 +13,7 @@ def init_random_seed(seed):
     np.random.seed(seed)
     torch.random.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False    
+    torch.backends.cudnn.benchmark = False 
 
 
 class PyTorchLightningPruningCallback(EarlyStopping):
@@ -57,32 +57,6 @@ class PyTorchLightningPruningCallback(EarlyStopping):
             raise optuna.exceptions.TrialPruned(message)
 
 
-# class ObjectDict(dict):
-#     """
-#     Interface similar to an argparser
-#     """
-
-#     def __init__(self):
-#         pass
-
-#     def __setattr__(self, attr, value):
-#         self[attr] = value
-#         return self[attr]
-
-#     def __getattr__(self, attr):
-#         if attr.startswith("_"):
-#             # https://stackoverflow.com/questions/10364332/how-to-pickle-python-object-derived-from-dict
-#             raise AttributeError
-#         try:
-#             return super().__getitem__(attr)
-#         except KeyError:
-#             # cPickle expects __getattr__ to raise AttributeError, not KeyError.
-#             raise AttributeError(self._KeyErrorString(name))
-
-#     @property
-#     def __dict__(self):
-#         return dict(self)
-
 class ObjectDict(dict):
     """
     easy way to represent (hyper)parameters.
@@ -101,6 +75,10 @@ class ObjectDict(dict):
 
     def copy(self, **extra_params):
         return ObjectDict(**self, **extra_params)
+
+    @property
+    def __dict__(self):
+        return dict(self)
 
 
 def hparams_power(hparams):
