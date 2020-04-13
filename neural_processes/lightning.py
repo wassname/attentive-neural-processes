@@ -2,12 +2,13 @@ import pytorch_lightning as pl
 import torch
 from torch import nn
 import torch.nn.functional as F
+import numpy as np
 from matplotlib import pyplot as plt
 
 from .utils import ObjectDict
 from .data.smart_meter import get_smartmeter_df, SmartMeterDataSet, collate_fns
 from .logger import logger
-from .plot import plot_from_loader
+from .plot import plot_from_loader, plot_from_loader_to_tensor
 
 
 class PL_Seq2Seq(pl.LightningModule):
@@ -122,7 +123,7 @@ class PL_Seq2Seq(pl.LightningModule):
         optim = torch.optim.Adam(self.parameters(), lr=self.hparams["learning_rate"])
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optim, patience=self.hparams["patience"], verbose=True, min_lr=1e-7
-        )  # note early stopping has patience 3
+        )
         return [optim], [scheduler]
 
     def _get_cache_dfs(self):
@@ -137,13 +138,22 @@ class PL_Seq2Seq(pl.LightningModule):
         data_train = SmartMeterDataSet(
             df_train, self.hparams["num_context"], self.hparams["num_extra_target"]
         )
+
+        # I want epochs to be about 5 mins of training data. That way earlystopping etc work
+        sampler = None
+        max_epoch_steps = self.hparams.get("max_epoch_steps", None)
+        if max_epoch_steps is not None:
+            inds = np.random.choice(np.arange(len(data_train)), max_epoch_steps)
+            sampler = torch.utils.data.sampler.SubsetRandomSampler(inds)
+        
         return torch.utils.data.DataLoader(
             data_train,
             batch_size=self.hparams["batch_size"],
-            shuffle=True,
+            # shuffle=True,
             collate_fn=collate_fns(
                 self.hparams["num_context"], self.hparams["num_extra_target"], sample=True, context_in_target=self.hparams["context_in_target"]
             ),
+            sampler=sampler,
             num_workers=self.hparams["num_workers"],
         )
 
@@ -153,10 +163,15 @@ class PL_Seq2Seq(pl.LightningModule):
         data_test = SmartMeterDataSet(
             df_test, self.hparams["num_context"], self.hparams["num_extra_target"]
         )
+        sampler = None
+        max_epoch_steps = self.hparams.get("max_epoch_steps", None)
+        if max_epoch_steps is not None:
+            sampler = torch.utils.data.sampler.SubsetRandomSampler(range(int(max_epoch_steps//10)))
         return torch.utils.data.DataLoader(
             data_test,
             batch_size=self.hparams["batch_size"],
-            shuffle=False,
+            # shuffle=False,
+            sampler=sampler,
             collate_fn=collate_fns(
                 self.hparams["num_context"], self.hparams["num_extra_target"], sample=False, context_in_target=self.hparams["context_in_target"]
             ),
@@ -168,11 +183,15 @@ class PL_Seq2Seq(pl.LightningModule):
         data_test = SmartMeterDataSet(
             df_test, self.hparams["num_context"], self.hparams["num_extra_target"]
         )
+        max_epoch_steps = self.hparams.get("max_epoch_steps", None)
+        if max_epoch_steps is not None:
+            sampler = torch.utils.data.sampler.SubsetRandomSampler(range(int(max_epoch_steps//10)))
         return torch.utils.data.DataLoader(
             data_test,
             batch_size=self.hparams["batch_size"],
-            shuffle=False,
+            # shuffle=False,
             collate_fn=collate_fns(
                 self.hparams["num_context"], self.hparams["num_extra_target"], sample=False, context_in_target=self.hparams["context_in_target"]
             ),
+            sampler=sampler,
         )
