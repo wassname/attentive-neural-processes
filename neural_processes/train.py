@@ -114,7 +114,8 @@ def run_trial(
     model, trainer = main(
         trial, PL_MODEL_CLS, name=name, MODEL_DIR=MODEL_DIR, train=False, prune=False
     )
-    if number is None:
+    checkpoints = sorted(Path(trainer.checkpoint_callback.dirpath).glob("*.ckpt"))
+    if len(checkpoints)==0 or number is None:
         try:
             trainer.fit(model)
         except KeyboardInterrupt:
@@ -147,6 +148,8 @@ def run_trial(
         plt.show()
         plot_from_loader(model.test_dataloader(), model, i=670, title='test 670')
         plt.show()
+    else:
+        print('no checkpoints')
 
     try:
         trainer.test(model)
