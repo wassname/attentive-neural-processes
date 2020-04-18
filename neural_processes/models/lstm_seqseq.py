@@ -147,14 +147,14 @@ class LSTMSeq2Seq_PL(PL_Seq2Seq):
     }
 
     @staticmethod
-    def add_suggest(trial):
+    def add_suggest(trial, user_attrs={}):
         trial.suggest_loguniform("learning_rate", 1e-5, 1e-2)
         trial.suggest_uniform("lstm_dropout", 0, 0.75)
         trial.suggest_discrete_uniform("hidden_size_power", 3, 9, 1)
         trial.suggest_int("lstm_layers", 1, 8)
         trial.suggest_categorical("bidirectional", [False, True])
 
-        trial._user_attrs = {
+        user_attrs_default = {
             "batch_size": 16,
             "grad_clip": 40,
             "max_nb_epochs": 200,
@@ -168,4 +168,6 @@ class LSTMSeq2Seq_PL(PL_Seq2Seq):
             "output_size": 1,
             'min_std': 0.005,
         }
+        [trial.set_user_attr(k, v) for k, v in user_attrs_default.items()]
+        [trial.set_user_attr(k, v) for k, v in user_attrs.items()]
         return trial

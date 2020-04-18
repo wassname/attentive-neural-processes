@@ -151,7 +151,7 @@ class TransformerSeq2Seq_PL(PL_Seq2Seq):
     }
 
     @staticmethod
-    def add_suggest(trial: optuna.Trial):
+    def add_suggest(trial: optuna.Trial, user_attrs={}):
         """
         Add hyperparam ranges to an optuna trial and typical user attrs.
         
@@ -174,7 +174,7 @@ class TransformerSeq2Seq_PL(PL_Seq2Seq):
         trial.suggest_discrete_uniform("nhead_power", 1, 4, 1)
         trial.suggest_int("nlayers", 1, 12)
 
-        trial._user_attrs = {
+        user_attrs_default = {
             "batch_size": 16,
             "grad_clip": 40,
             "max_nb_epochs": 200,
@@ -189,4 +189,6 @@ class TransformerSeq2Seq_PL(PL_Seq2Seq):
             "patience": 3,
             'min_std': 0.005,
         }
+        [trial.set_user_attr(k, v) for k, v in user_attrs_default.items()]
+        [trial.set_user_attr(k, v) for k, v in user_attrs.items()]
         return trial

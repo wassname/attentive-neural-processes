@@ -36,7 +36,7 @@ class PL_NeuralProcess(PL_Seq2Seq):
     }
 
     @staticmethod
-    def add_suggest(trial):        
+    def add_suggest(trial, user_attrs={}):        
         trial.suggest_loguniform("learning_rate", 1e-6, 1e-2)
         trial.suggest_int("attention_layers", 1, 4)
         trial.suggest_discrete_uniform("num_heads_power", 2, 4, 1)
@@ -70,7 +70,7 @@ class PL_NeuralProcess(PL_Seq2Seq):
         trial.suggest_categorical("use_deterministic_path", [False, True])
         trial.suggest_categorical("use_rnn", [True, False])
 
-        trial._user_attrs = {
+        user_attrs_default = {
             'batch_size': 16,
             'grad_clip': 40,
             'max_nb_epochs': 200,
@@ -83,7 +83,9 @@ class PL_NeuralProcess(PL_Seq2Seq):
             'y_dim': 1,
             'patience': 3,
             'min_std': 0.005,
-        }        
+        }
+        [trial.set_user_attr(k, v) for k, v in user_attrs_default.items()]
+        [trial.set_user_attr(k, v) for k, v in user_attrs.items()]    
         return trial
 
 

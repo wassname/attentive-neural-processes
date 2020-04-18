@@ -56,13 +56,14 @@ def main(
     return model, trainer
 
 
-def objective(trial, PL_MODEL_CLS):
+def objective(trial, PL_MODEL_CLS, name):
     # see https://github.com/optuna/optuna/blob/cf6f02d/examples/pytorch_lightning_simple.py
     trial = PL_MODEL_CLS.add_suggest(trial)
+    # trial._user_attrs.update(user_attrs)
 
-    print("trial", trial.number, "params", trial.params)
+    print("trial", trial.number, "params", trial.params, trial._user_attrs)
 
-    model, trainer = main(trial)
+    model, trainer = main(trial, PL_MODEL_CLS=PL_MODEL_CLS, name=name)
 
     # also report to tensorboard & print
     print("logger.metrics", model.logger.metrics[-1:])
