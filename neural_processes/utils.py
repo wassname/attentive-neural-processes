@@ -9,12 +9,58 @@ import optuna
 from .logger import logger
 
 
+def agg_dict(outputs):
+    keys = outputs[0].keys()
+    return {
+        k: torch.stack([x[k] for x in outputs if k in x])
+        .mean()
+        .cpu()
+        .item()
+        for k in keys
+    }
+
+def agg_logs(outputs):
+    """
+    Aggregate a list of dicts into a single (may have sub dicts but all array are aggregated)
+
+    outputs = [
+        {'val_loss': 0.7206,
+            'log': {'val_loss': 0.7206, 'val_loss_p': 0.7206,}},
+        {'val_loss': 0.7047,
+            'log': {'val_loss': 0.7047, 'val_loss_p': 0.7047}},
+    ]
+    
+    """
+    if isinstance(outputs, dict):
+        outputs = [outputs]
+    
+    aggs = {}
+    if len(outputs) > 0:
+        for j in outputs[0].keys():
+            if isinstance(outputs[0][j], dict):
+                # Take mean of sub dicts
+                keys = outputs[0][j].keys()
+                aggs[j] = {
+                    k: torch.stack([x[j][k] for x in outputs if k in x[j]])
+                    .mean()
+                    .cpu()
+                    .item()
+                    for k in keys
+                }
+            else:
+                # Take mean of numbers
+                aggs[j] = (
+                    torch.stack([x[j] for x in outputs if j in x]).mean().cpu().item()
+                )
+    return aggs
+
+
 def init_random_seed(seed):
     # https://pytorch.org/docs/stable/notes/randomness.html
     np.random.seed(seed)
     torch.random.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False 
+    torch.backends.cudnn.benchmark = False
 
 
 class PyTorchLightningPruningCallback(EarlyStopping):
@@ -64,6 +110,7 @@ class ObjectDict(dict):
 
     https://stackoverflow.com/a/50613966/221742
     """
+
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
@@ -92,8 +139,9 @@ def hparams_power(hparams):
         if k.endswith("_power"):
             k_new = k.replace("_power", "")
             hparams[k_new] = int(2 ** hparams[k])
-    logger.debug('hparams %s', hparams)
+    logger.debug("hparams %s", hparams)
     return hparams
+
 
 def log_prob_sigma(value, loc, log_scale):
     """A slightly more stable (not confirmed yet) log prob taking in log_var instead of scale.

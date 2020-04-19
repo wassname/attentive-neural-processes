@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import numpy as np
 from matplotlib import pyplot as plt
 
-from .utils import ObjectDict
+from .utils import ObjectDict, agg_logs
 from .data.smart_meter import get_smartmeter_df, SmartMeterDataSet, collate_fns
 from .logger import logger
 from .plot import plot_from_loader, plot_from_loader_to_tensor
@@ -51,26 +51,18 @@ class PL_Seq2Seq(pl.LightningModule):
         if int(self.hparams["vis_i"]) > 0:
             self.show_image()
 
-        tensorboard_logs = self.agg_logs(outputs)
+        outputs = agg_logs(outputs)
 
-        tensorboard_logs_str = {k: f"{v}" for k, v in tensorboard_logs.items()}
-        print(f"step {self.trainer.global_step}, {tensorboard_logs_str}")
-        return {"avg_val_loss": tensorboard_logs["val_loss"], "log": tensorboard_logs}
+        # agg and print self.train_logs HACK https://github.com/PyTorchLightning/pytorch-lightning/issues/100
+        train_outputs = agg_logs(self.train_logs)
+        self.train_logs = []
 
-    def agg_logs(self, outputs):
-        if isinstance(outputs, dict):
-            outputs = [outputs]
-        aggs = {}
-        if len(outputs)>0:
-            for j in outputs[0]:
-                if isinstance(outputs[0][j], dict):
-                    # Take mean of sub dicts
-                    keys = outputs[0][j].keys()
-                    aggs[j] = {k: torch.stack([x[j][k] for x in outputs if k in x[j]]).mean().item() for k in keys}
-                else:
-                    # Take mean of numbers
-                    aggs[j] = torch.stack([x[j] for x in outputs if j in x]).mean().item()
-        return aggs
+        print(f"step val {self.trainer.global_step}, {outputs} {train_outputs}")
+
+        # tensorboard_logs_str = {k: f"{v}" for k, v in tensorboard_logs.items()}
+        # print(f"step {self.trainer.global_step}, {outputs}")
+        return {"val_loss": outputs["val_loss"], "train_loss": train_outputs.get("train_loss", None), "log": {**train_outputs["log"], **outputs["log"]}}
+
 
     def show_image(self):        
         # https://github.com/PytorchLightning/pytorch-lightning/blob/f8d9f8f/pytorch_lightning/core/lightning.py#L293
@@ -98,12 +90,12 @@ class PL_Seq2Seq(pl.LightningModule):
 
     def test_end(self, outputs):
 
-        tensorboard_logs = self.agg_logs(outputs)
+        outputs = agg_logs(outputs)
 
         logger.info(
-            f"step {self.trainer.global_step}, {tensorboard_logs_str}"
+            f"step {self.trainer.global_step}, {outputs}"
         )
-        return {"avg_test_loss": tensorboard_logs["test_loss"], "log": tensorboard_logs}
+        return {"test_loss": outputs["test_loss"], "log": outputs["log"]}
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(self.parameters(), lr=self.hparams["learning_rate"])

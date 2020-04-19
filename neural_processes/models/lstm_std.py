@@ -97,18 +97,6 @@ class LSTMNet(nn.Module):
             dict(loss=loss_p.mean(), loss_p_weighted=loss_p_weighted.mean(), loss_p=loss_p.mean(), loss_mse=loss_mse.mean()),
             dict(log_sigma=log_sigma, y_dist=y_dist),
         )
-        # loss = None
-        # if target_y is not None:
-        #     loss = (
-        #         F.mse_loss(
-        #             y_pred * loss_scale, y[:, -steps:, :] * loss_scale, reduction="none"
-        #         )
-        #         / loss_scale
-        #     )
-
-        #     assert torch.isfinite(loss)
-
-        # return y_pred, dict(loss=loss), dict()
 
 
 class LSTM_PL_STD(PL_Seq2Seq):
@@ -134,7 +122,7 @@ class LSTM_PL_STD(PL_Seq2Seq):
 
         # constants
         user_attrs_default = {
-            "batch_size": 16,
+            "batch_size": 64,
             "grad_clip": 40,
             "max_nb_epochs": 200,
             "num_workers": 4,
