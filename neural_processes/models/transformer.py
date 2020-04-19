@@ -35,21 +35,6 @@ class NetTransformer(nn.Module):
         self.encoder = nn.TransformerEncoder(
             layer_enc, num_layers=self.hparams.nlayers, norm=encoder_norm
         )
-
-        # self.dec_norm = BatchNormSequence(self.hparams.x_dim)
-        # self.dec_emb = nn.Linear(self.hparams.x_dim, hidden_out_size)
-        # layer_dec = nn.TransformerDecoderLayer(
-        #     d_model=hidden_out_size,
-        #     dim_feedforward=self.hparams.hidden_size,
-        #     dropout=self.hparams.attention_dropout,
-        #     nhead=self.hparams.nhead,
-        # )
-        # decoder_norm = nn.LayerNorm(hidden_out_size)
-        # self.decoder = nn.TransformerDecoder(
-        #     layer_dec,
-        #     num_layers=self.hparams.nlayers,
-        #     norm=decoder_norm
-        # )
         self.mean = nn.Linear(hidden_out_size, self.hparams.y_dim)
         self.std = nn.Linear(hidden_out_size, self.hparams.y_dim)
         self._use_lvar = 0

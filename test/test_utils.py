@@ -21,14 +21,14 @@ def test_agg_logs():
         ]
     r = neural_processes.utils.agg_logs(outputs)
     assert isinstance(r, dict)
-    assert 'val_loss' in r.keys()
-    assert 'val_loss_kl' in r.keys()
-    assert isinstance(r['val_loss'], float)
+    assert 'agg_val_loss' in r.keys()
+    assert 'agg_val_loss_kl' in r['log'].keys()
+    assert isinstance(r['agg_val_loss'], float)
 
     outputs = {'val_loss': torch.tensor(0.7206),
             'log': {'val_loss': torch.tensor(0.7206), 'val_loss_p': torch.tensor(0.7206), 'val_loss_kl': torch.tensor(2.3812e-06), 'val_loss_mse': torch.tensor(0.1838)}}
     r = neural_processes.utils.agg_logs(outputs)
     assert isinstance(r, dict)
-    assert 'val_loss' in r.keys()
-    assert 'val_loss_kl' in r.keys()
-    assert isinstance(r['val_loss'], float)
+    assert 'agg_val_loss' in r.keys()
+    assert 'agg_val_loss_kl' in r['log'].keys()
+    assert isinstance(r['agg_val_loss'], float)

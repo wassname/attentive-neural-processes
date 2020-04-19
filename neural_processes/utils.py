@@ -29,6 +29,7 @@ def agg_logs(outputs):
         {'val_loss': 0.7047,
             'log': {'val_loss': 0.7047, 'val_loss_p': 0.7047}},
     ]
+    -> {'agg_val_loss': 0.7126500010490417, 'log': {'agg_val_loss': 0.7126500010490417, 'agg_val_loss_p': 0.7126500010490417, 'agg_val_loss_kl': 2.6101499770447845e-06, 'agg_val_loss_mse': 0.17669999599456787}}
     
     """
     if isinstance(outputs, dict):
@@ -41,7 +42,7 @@ def agg_logs(outputs):
                 # Take mean of sub dicts
                 keys = outputs[0][j].keys()
                 aggs[j] = {
-                    k: torch.stack([x[j][k] for x in outputs if k in x[j]])
+                    'agg_'+k: torch.stack([x[j][k] for x in outputs if k in x[j]])
                     .mean()
                     .cpu()
                     .item()
@@ -49,7 +50,7 @@ def agg_logs(outputs):
                 }
             else:
                 # Take mean of numbers
-                aggs[j] = (
+                aggs['agg_'+j] = (
                     torch.stack([x[j] for x in outputs if j in x]).mean().cpu().item()
                 )
     return aggs

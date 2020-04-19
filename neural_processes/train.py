@@ -81,7 +81,7 @@ def objective(trial, PL_MODEL_CLS, name, user_attrs):
     model.logger.experiment.add_hparams(trial.params, model.logger.metrics[-1])
     model.logger.save()
 
-    return model.logger.metrics[-1]["test_loss"]
+    return model.logger.metrics[-1]["agg_test_loss"]
 
 
 def add_number(trial: optuna.Trial, model_dir: Path):

@@ -361,9 +361,9 @@ class NeuralProcess(nn.Module):
 
             # Weight loss nearer to prediction time?
             weight = (torch.arange(loss_p.shape[1]) + 1).float().to(device)[None, :]
-            loss_p_weighted = loss_p / torch.sqrt(weight) # We want to  weight nearer stuff more
+            loss_p_weighted = loss_p / torch.sqrt(weight)  # We want to  weight nearer stuff more
+            
             loss_p_weighted = loss_p_weighted.mean()
-
             loss = (loss_kl - log_p).mean()
             loss_kl = loss_kl.mean()
             log_p = log_p.mean()
@@ -377,4 +377,4 @@ class NeuralProcess(nn.Module):
             loss_p_weighted = None
 
         y_pred = dist.rsample() if self.training else dist.loc
-        return y_pred, dict(loss=loss, loss_p=loss_p, loss_kl=loss_kl, loss_mse=mse_loss, loss_p_weighted=loss_p_weighted), dict(log_sigma=log_sigma, dist=dist)
+        return y_pred, dict(loss=loss, loss_p=loss_p, loss_kl=loss_kl, loss_mse=mse_loss, loss_p_weighted=loss_p_weighted), dict(log_sigma=log_sigma, y_dist=dist)

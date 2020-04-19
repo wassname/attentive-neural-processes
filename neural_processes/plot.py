@@ -38,6 +38,10 @@ def plot_rows(
         target_y_rows = np.exp(target_y_rows) - eps
         context_y_rows = np.exp(context_y_rows) - eps
 
+    # I don't want to show too much context
+    context_y_rows = context_y_rows[-96:]
+    x_context_rows = x_context_rows[-96:]
+
     # Plot everything
     j = 0
     label = "energy(kWh/hh)"
@@ -121,7 +125,7 @@ def plot_from_loader(
         y_pred, losses, extra = model(context_x, context_y, target_x, target_y)
         loss_test = losses["loss"] if "loss" in losses else 0.
         
-        y_std = extra["dist"].scale
+        y_std = extra["y_dist"].scale
 
         if plot:
             plt.figure()

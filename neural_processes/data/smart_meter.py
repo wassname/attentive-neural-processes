@@ -146,7 +146,7 @@ def is_val(f):
     return f2i(f) % 7==1
 
 @cache.memoize()
-def get_smartmeter_df(indir=Path('./data/smart-meters-in-london'), max_files=40, use_logy=False):
+def get_smartmeter_df(indir=Path('./data/smart-meters-in-london'), max_files=60, use_logy=False):
     
     df_weather = load_weather_csv(indir/'weather_hourly_darksky.csv')    
 

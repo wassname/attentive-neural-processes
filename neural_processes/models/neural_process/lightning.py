@@ -25,8 +25,8 @@ class PL_NeuralProcess(PL_Seq2Seq):
         'det_enc_self_attn_type': 'uniform',
         'latent_enc_self_attn_type': 'uniform',
         'num_heads_power': 3,
-        'hidden_dim_power': 5,
-        'latent_dim_power': 4,
+        'hidden_dim_power': 6,
+        'latent_dim_power': 5,
         'n_decoder_layers': 4,
         'n_latent_encoder_layers': 2,
         'use_deterministic_path': False,
@@ -149,7 +149,6 @@ class PL_ANP(PL_NeuralProcess):
     @staticmethod
     def add_suggest(trial, user_attrs={}):
         trial.suggest_loguniform("learning_rate", 1e-6, 1e-2)
-        trial.suggest_int("attention_layers", 1, 4)
         trial.suggest_discrete_uniform("num_heads_power", 2, 4, 1)
 
         trial.suggest_discrete_uniform(
@@ -164,12 +163,6 @@ class PL_ANP(PL_NeuralProcess):
 
         trial.suggest_uniform("dropout", 0, 0.9)
         trial.suggest_uniform("attention_dropout", 0, 0.9)
-
-        trial.suggest_categorical(
-            "latent_enc_self_attn_type", ['uniform', 'multihead']
-        )
-        trial.suggest_categorical("det_enc_self_attn_type",  ['uniform', 'multihead'])
-        trial.suggest_categorical("det_enc_cross_attn_type", ['uniform', 'multihead'])
 
         trial.suggest_categorical("batchnorm", [False, True])
         trial.suggest_categorical("use_deterministic_path", [False, True])
@@ -205,7 +198,6 @@ class PL_ANPRNN(PL_NeuralProcess):
     @staticmethod
     def add_suggest(trial, user_attrs={}):        
         trial.suggest_loguniform("learning_rate", 1e-6, 1e-2)
-        trial.suggest_int("attention_layers", 1, 4)
         trial.suggest_discrete_uniform("num_heads_power", 2, 4, 1)
 
         trial.suggest_discrete_uniform(

@@ -61,7 +61,7 @@ class PL_Seq2Seq(pl.LightningModule):
 
         # tensorboard_logs_str = {k: f"{v}" for k, v in tensorboard_logs.items()}
         # print(f"step {self.trainer.global_step}, {outputs}")
-        return {"val_loss": outputs["val_loss"], "train_loss": train_outputs.get("train_loss", None), "log": {**train_outputs["log"], **outputs["log"]}}
+        return {"val_loss": outputs["agg_val_loss"], "train_loss": train_outputs.get("agg_train_loss", None), "log": {**train_outputs.get("log", {}), **outputs["log"]}}
 
 
     def show_image(self):        
@@ -82,8 +82,8 @@ class PL_Seq2Seq(pl.LightningModule):
         context_x, context_y, target_x, target_y = batch
         y_dist = extra['y_dist']
 
-        # For test use a diff loss, log_p over next <24h, so it's a standard amount of steps
-        loss = -y_dist.log_prob(target_y)[:, :24].mean()
+        # For test use a -logp only
+        loss = -y_dist.log_prob(target_y).mean()
         tensorboard_logs = {"test_" + k: v for k, v in losses.items()}
         assert torch.isfinite(loss)
         return {"test_loss": loss, "log": tensorboard_logs}
@@ -91,11 +91,10 @@ class PL_Seq2Seq(pl.LightningModule):
     def test_end(self, outputs):
 
         outputs = agg_logs(outputs)
-
         logger.info(
             f"step {self.trainer.global_step}, {outputs}"
         )
-        return {"test_loss": outputs["test_loss"], "log": outputs["log"]}
+        return {"test_loss": outputs["agg_test_loss"], "log": outputs["log"]}
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(self.parameters(), lr=self.hparams["learning_rate"])
@@ -153,6 +152,7 @@ class PL_Seq2Seq(pl.LightningModule):
             collate_fn=collate_fns(
                 self.hparams["num_context"], self.hparams["num_extra_target"], sample=False, context_in_target=self.hparams["context_in_target"]
             ),
+            num_workers=self.hparams["num_workers"],
         )
 
     @pl.data_loader
@@ -172,4 +172,5 @@ class PL_Seq2Seq(pl.LightningModule):
                 self.hparams["num_context"], self.hparams["num_extra_target"], sample=False, context_in_target=self.hparams["context_in_target"]
             ),
             sampler=sampler,
+            num_workers=self.hparams["num_workers"],
         )
