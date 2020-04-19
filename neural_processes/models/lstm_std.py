@@ -76,7 +76,7 @@ class LSTMNet(nn.Module):
         y_dist = torch.distributions.Normal(mean, sigma)
 
         # Loss
-        loss_mse = loss_p = None
+        loss_mse = loss_p_weighted = loss_p = None
         if target_y is not None:
             loss_mse = F.mse_loss(mean, target_y, reduction="none")
             if self._use_lvar:
@@ -86,19 +86,16 @@ class LSTMNet(nn.Module):
             if self.hparams["context_in_target"]:
                 loss_p[: context_x.size(1)] /= 100
                 loss_mse[: context_x.size(1)] /= 100
-            # # Don't catch loss on context window
-            # mean = mean[:, self.hparams.num_context:]
-            # log_sigma = log_sigma[:, self.hparams.num_context:]
 
             # Weight loss nearer to prediction time?
             weight = (torch.arange(loss_p.shape[1]) + 1).float().to(device)[None, :]
-            loss_p = loss_p / torch.sqrt(weight)  # We want to weight nearer stuff more
+            loss_p_weighted = loss_p / torch.sqrt(weight)  # We want to weight nearer stuff more
 
         y_pred = y_dist.rsample if self.training else y_dist.loc
         return (
             y_pred,
-            dict(loss_p=loss_p.mean(), loss_mse=loss_mse.mean()),
-            dict(log_sigma=log_sigma, dist=y_dist),
+            dict(loss=loss_p.mean(), loss_p_weighted=loss_p_weighted.mean(), loss_p=loss_p.mean(), loss_mse=loss_mse.mean()),
+            dict(log_sigma=log_sigma, y_dist=y_dist),
         )
         # loss = None
         # if target_y is not None:

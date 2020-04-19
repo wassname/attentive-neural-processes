@@ -68,22 +68,17 @@ class NetTransformer(nn.Module):
         x[~x_mask] = 0
         x = x.detach()
         x_key_padding_mask = ~x_mask.any(-1)
-        # print('x_key_padding_mask', x_mask.float().mean())
-        # print(x.shape, 'x1')
+
         x = self.enc_emb(x).permute(1, 0, 2)
-        # print(x.shape, 'x2')
-        # Size([C, B, emb_dim])
+        
         outputs = self.encoder(x, src_key_padding_mask=x_key_padding_mask).permute(
             1, 0, 2
         )
-        # print(outputs.shape, 'outputs')
 
         # Seems to help a little, especially with extrapolating out of bounds
         steps = context_y.shape[1]
         mean = self.mean(outputs)[:, steps:, :]
         log_sigma = self.std(outputs)[:, steps:, :]
-        # mean_target = mean[:, -steps:, :]
-        # mean_context = mean[:, :-steps, :]
 
         if self._use_lvar:
             log_sigma = torch.clamp(
@@ -105,81 +100,17 @@ class NetTransformer(nn.Module):
             if self.hparams["context_in_target"]:
                 loss_p[: context_x.size(1)] /= 100
                 loss_mse[: context_x.size(1)] /= 100
-            # # Don't catch loss on context window
-            # mean = mean[:, self.hparams.num_context:]
-            # log_sigma = log_sigma[:, self.hparams.num_context:]
 
             # Weight loss nearer to prediction time?
             weight = (torch.arange(loss_p.shape[1]) + 1).float().to(device)[None, :]
-            loss_p = loss_p / torch.sqrt(weight)  # We want to weight nearer stuff more
+            loss_p_weighted = loss_p / torch.sqrt(weight)  # We want to weight nearer stuff more
 
         y_pred = y_dist.rsample if self.training else y_dist.loc
         return (
             y_pred,
-            dict(loss_p=loss_p.mean(), loss_mse=loss_mse.mean()),
-            dict(log_sigma=log_sigma, dist=y_dist),
+            dict(loss=loss_p.mean(), loss_p=loss_p.mean(), loss_mse=loss_mse.mean(), loss_p_weighted=loss_p_weighted.mean()),
+            dict(log_sigma=log_sigma, y_dist=y_dist),
         )
-        # mean_target = mean[:, -steps:, :]
-        # mean_context = mean[:, :-steps, :]
-
-        # loss = None
-        # if target_y is not None:
-        #     y = torch.cat([context_y, target_y], 1)
-        #     y_mask = torch.isfinite(y) & (y != self.hparams.nan_value)
-        #     y[~y_mask] = 0
-        #     y = y.detach()
-
-        #     loss_scale = 100
-        #     # loss = F.mse_loss(mean * loss_scale, y * loss_scale, reduction='none') / loss_scale
-
-        #     loss_target = (
-        #         F.mse_loss(
-        #             mean_target * loss_scale,
-        #             y[:, -steps:, :] * loss_scale,
-        #             reduction="none",
-        #         )
-        #         / loss_scale
-        #     )
-        #     loss_context = (
-        #         F.mse_loss(
-        #             mean_context * loss_scale,
-        #             y[:, :-steps, :] * loss_scale,
-        #             reduction="none",
-        #         )
-        #         / loss_scale
-        #     )
-
-        #     y_mask_target = y_mask[:, -steps:, :].detach()
-        #     y_mask_context = y_mask[:, :-steps, :].detach()
-        #     # loss_target = loss[:, -steps:, :]
-        #     # loss_context = loss[:, :-steps, :]
-        #     # print(0, loss_context.sum(), loss_target.sum())
-
-        #     weight = (
-        #         (torch.arange(loss_target.shape[1]) + 0.5)
-        #         .float()
-        #         .to(device)[None, :, None]
-        #     )
-        #     # weight /= weight.sum()
-        #     # print(1.0, loss_context.sum(), loss_target.sum())
-        #     loss_target = loss_target / torch.sqrt(
-        #         weight
-        #     )  # We want to weight nearer stuff more
-        #     # print(1.5, loss_context.sum(), y_mask_context.sum(), loss_target.sum(), y_mask_target.sum(), (loss_context * y_mask_context).sum())
-        #     loss_context = (loss_context * y_mask_context.float()).sum() / (
-        #         y_mask_context.sum() + 1.0
-        #     )
-        #     loss_target = (loss_target * y_mask_target.float()).sum() / (
-        #         y_mask_target.sum() + 1.0
-        #     )  # Mean over unmasked ones
-        #     # print(2, loss_context.sum(), loss_target.sum())
-
-        #     # Perhaps predicting the past, as a secondary loss will help
-        #     loss = loss_context / 100.0 + loss_target
-
-        #     assert torch.isfinite(loss)
-
-        # return mean_target, dict(loss=loss), dict()
 
 
 class PL_Transformer(PL_Seq2Seq):

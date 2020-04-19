@@ -35,40 +35,27 @@ class PL_Seq2Seq(pl.LightningModule):
         assert all(torch.isfinite(d).all() for d in batch)
         context_x, context_y, target_x, target_y = batch
         y_dist, losses, extra = self.forward(context_x, context_y, target_x, target_y)
-        loss = losses['loss_p'] # + loss_mse
-        tensorboard_logs = {
-            "train/loss": loss,
-            'train/loss_mse': losses['loss_mse'],
-            "train/loss_p": losses['loss_p'],
-            "train/sigma": torch.exp(extra['log_sigma']).mean()}
-        return {"loss": loss, "log": tensorboard_logs}
+        tensorboard_logs = {"train_" + k: v for k, v in losses.items()}
+        assert torch.isfinite(tensorboard_logs["train_loss"])
+        return {"loss": tensorboard_logs['train_loss'], "log": tensorboard_logs}
 
     def validation_step(self, batch, batch_idx):
         context_x, context_y, target_x, target_y = batch
         assert all(torch.isfinite(d).all() for d in batch)
         y_dist, losses, extra = self.forward(context_x, context_y, target_x, target_y)
-        loss = losses['loss_p'] # + loss_mse
-        tensorboard_logs = {
-            "val_loss": loss,
-            'val/loss_mse': losses['loss_mse'],
-            "val/loss_p": losses['loss_p'],
-            "val/sigma": torch.exp(extra['log_sigma']).mean()}
-        return {"val_loss": loss, "log": tensorboard_logs}
+        tensorboard_logs = {"val_" + k: v for k, v in losses.items()}
+        assert torch.isfinite(tensorboard_logs["val_loss"])
+        return {"val_loss": tensorboard_logs["val_loss"], "log": tensorboard_logs}
 
     def validation_end(self, outputs):
         if int(self.hparams["vis_i"]) > 0:
             self.show_image()
 
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
-        keys = outputs[0]["log"].keys()
-        tensorboard_logs = {
-            k: torch.stack([x["log"][k] for x in outputs if k in x["log"]]).mean()
-            for k in keys
-        }
+        tensorboard_logs = self.agg_logs(outputs)
+
         tensorboard_logs_str = {k: f"{v}" for k, v in tensorboard_logs.items()}
         print(f"step {self.trainer.global_step}, {tensorboard_logs_str}")
-        assert torch.isfinite(avg_loss)
-        return {"avg_val_loss": avg_loss, "log": tensorboard_logs}
+        return {"avg_val_loss": tensorboard_logs["val_loss"], "log": tensorboard_logs}
 
     def agg_logs(self, outputs):
         if isinstance(outputs, dict):
@@ -99,25 +86,24 @@ class PL_Seq2Seq(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         pred, losses, extra = self.forward(*batch)
-        # For test use a diff loss, MSE over next 24
-        # loss = losses["loss"]
-        loss = F.mse_loss(pred, batch[-1], reduction='none')[:, :24].mean()
+
+        context_x, context_y, target_x, target_y = batch
+        y_dist = extra['y_dist']
+
+        # For test use a diff loss, log_p over next <24h, so it's a standard amount of steps
+        loss = -y_dist.log_prob(target_y)[:, :24].mean()
         tensorboard_logs = {"test_" + k: v for k, v in losses.items()}
+        assert torch.isfinite(loss)
         return {"test_loss": loss, "log": tensorboard_logs}
 
     def test_end(self, outputs):
-        avg_loss = torch.stack([x["test_loss"] for x in outputs]).mean()
-        keys = outputs[0]["log"].keys()
-        tensorboard_logs = {
-            k: torch.stack([x["log"][k] for x in outputs if k in x["log"]]).mean()
-            for k in keys
-        }
-        tensorboard_logs_str = {k: f"{v}" for k, v in tensorboard_logs.items()}
+
+        tensorboard_logs = self.agg_logs(outputs)
 
         logger.info(
             f"step {self.trainer.global_step}, {tensorboard_logs_str}"
         )
-        return {"avg_val_loss": avg_loss, "log": tensorboard_logs}
+        return {"avg_test_loss": tensorboard_logs["test_loss"], "log": tensorboard_logs}
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(self.parameters(), lr=self.hparams["learning_rate"])

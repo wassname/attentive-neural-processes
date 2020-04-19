@@ -6,6 +6,7 @@ import torch
 import math
 import torch
 import optuna
+from .logger import logger
 
 
 def init_random_seed(seed):
@@ -91,6 +92,7 @@ def hparams_power(hparams):
         if k.endswith("_power"):
             k_new = k.replace("_power", "")
             hparams[k_new] = int(2 ** hparams[k])
+    logger.debug('hparams %s', hparams)
     return hparams
 
 def log_prob_sigma(value, loc, log_scale):

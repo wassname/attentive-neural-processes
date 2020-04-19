@@ -304,7 +304,8 @@ class NeuralProcess(nn.Module):
         self._use_lvar = use_lvar
 
     def forward(self, context_x, context_y, target_x, target_y=None):
-
+        device = next(self.parameters()).device
+        
         # https://stackoverflow.com/a/46772183/221742
         target_x = self.norm_x(target_x)
         context_x = self.norm_x(context_x)
@@ -353,18 +354,27 @@ class NeuralProcess(nn.Module):
                     log_p[:, :context_x.size(1)] /= 100 # There's the temptation for it to fit only on context, where it knows the answer, and learn very low uncertainty. 
                 loss_kl = torch.distributions.kl_divergence(
                     dist_post, dist_prior).mean(-1)  # [B, R].mean(-1)
+            
             loss_kl = loss_kl[:, None].expand(log_p.shape)
             mse_loss = F.mse_loss(dist.loc, target_y, reduction='none')[:,:context_x.size(1)].mean()
-            loss_p = -log_p.mean()
+            loss_p = -log_p
+
+            # Weight loss nearer to prediction time?
+            weight = (torch.arange(loss_p.shape[1]) + 1).float().to(device)[None, :]
+            loss_p_weighted = loss_p / torch.sqrt(weight) # We want to  weight nearer stuff more
+            loss_p_weighted = loss_p_weighted.mean()
+
             loss = (loss_kl - log_p).mean()
             loss_kl = loss_kl.mean()
             log_p = log_p.mean()
+            loss_p = loss_p.mean()
 
         else:
             loss_p = None
             mse_loss = None
             loss_kl = None
             loss = None
+            loss_p_weighted = None
 
         y_pred = dist.rsample() if self.training else dist.loc
-        return y_pred, dict(loss=loss, loss_p=loss_p, loss_kl=loss_kl, loss_mse=mse_loss), dict(log_sigma=log_sigma, dist=dist)
+        return y_pred, dict(loss=loss, loss_p=loss_p, loss_kl=loss_kl, loss_mse=mse_loss, loss_p_weighted=loss_p_weighted), dict(log_sigma=log_sigma, dist=dist)

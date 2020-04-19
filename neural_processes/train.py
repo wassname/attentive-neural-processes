@@ -56,21 +56,32 @@ def main(
     return model, trainer
 
 
-def objective(trial, PL_MODEL_CLS, name):
+def objective(trial, PL_MODEL_CLS, name, user_attrs):
+    """For optuna hparam opt."""
     # see https://github.com/optuna/optuna/blob/cf6f02d/examples/pytorch_lightning_simple.py
     trial = PL_MODEL_CLS.add_suggest(trial)
-    # trial._user_attrs.update(user_attrs)
+    [trial.set_user_attr(k, v) for k, v in user_attrs.items()]
 
-    print("trial", trial.number, "params", trial.params, trial._user_attrs)
+    print(dict(number=trial.number, params=trial.params, user_attrs=trial.user_attrs))
 
     model, trainer = main(trial, PL_MODEL_CLS=PL_MODEL_CLS, name=name)
 
+    # Load checkpoint
+    checkpoints = sorted(Path(trainer.checkpoint_callback.dirpath).glob("*.ckpt"))
+    if len(checkpoints):
+        checkpoint = checkpoints[-1]
+        device = next(model.parameters()).device
+        print(f"Loading checkpoint {checkpoint}")
+        model = model.load_from_checkpoint(checkpoint).to(device)
+    
+    trainer.test(model)
+
     # also report to tensorboard & print
     print("logger.metrics", model.logger.metrics[-1:])
-    model.logger.experiment.add_hparams(trial.params, logger.metrics[-1])
+    model.logger.experiment.add_hparams(trial.params, model.logger.metrics[-1])
     model.logger.save()
 
-    return model.logger.metrics[-1]["val_loss"]
+    return model.logger.metrics[-1]["avg_test_loss"]
 
 
 def add_number(trial: optuna.Trial, model_dir: Path):
@@ -109,12 +120,13 @@ def run_trial(
         trial.number = number
 
     # Add user attributes
-    trial._user_attrs.update(user_attrs)
+    [trial.set_user_attr(k, v) for k, v in user_attrs.items()]
     print('trial', trial.number, trial, trial.params, trial.user_attrs)
 
     model, trainer = main(
         trial, PL_MODEL_CLS, name=name, MODEL_DIR=MODEL_DIR, train=False, prune=False
     )
+    
     checkpoints = sorted(Path(trainer.checkpoint_callback.dirpath).glob("*.ckpt"))
     if len(checkpoints)==0 or number is None:
         try:
