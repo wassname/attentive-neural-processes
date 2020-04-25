@@ -25,7 +25,7 @@ import io
 import PIL
 from torchvision.transforms import ToTensor
 
-from neural_processes.modules import BatchNormSequence
+from neural_processes.modules import BatchNormSequence, batch_first_attention
 from neural_processes.data.smart_meter import get_smartmeter_df
 
 from neural_processes.utils import ObjectDict
@@ -38,6 +38,7 @@ class Seq2SeqNet(nn.Module):
     def __init__(self, hparams, _min_std=0.05):
         super().__init__()
         hparams = hparams_power(hparams)
+        print(hparams)
         self.hparams = hparams
         self._min_std = _min_std
 
@@ -51,6 +52,9 @@ class Seq2SeqNet(nn.Module):
             dropout=self.hparams.lstm_dropout,
         )
         self.multihead_attn = nn.MultiheadAttention(
+            self.hparams.hidden_size, num_heads=8
+        )
+        self.multihead_attn_cross = nn.MultiheadAttention(
             self.hparams.hidden_size, num_heads=8
         )
 
@@ -71,27 +75,39 @@ class Seq2SeqNet(nn.Module):
         self._use_lvar = False
 
     def forward(self, context_x, context_y, target_x, target_y=None):
+        device = next(self.parameters()).device
         x = torch.cat([context_x, context_y], -1)
 
         # Sometimes input normalisation can be important, an initial batch norm is a nice way to ensure this
         x = self.norm_input(x)
         target_x = self.norm_target(target_x)
 
-        _, (h_out, cell) = self.encoder(x)
+        output, (h_out, cell) = self.encoder(x)
+        # output = [batch, context+target, num_directions * hid dim ]
         # hidden = [batch size, n layers * n directions, hid dim]
         # cell = [batch size, n layers * n directions, hid dim]
 
         # context_x, d_encoded, target_x = k, v, q
 
-        # query, key, value = target_x, context_x, d_encoded
-        attn_output, _ = self.multihead_attn(
-            h_out.permute(1, 0, 2), h_out.permute(1, 0, 2), h_out.permute(1, 0, 2)
-        )
-        h_out = attn_output.permute(1, 0, 2).contiguous()
-        attn_output, _ = self.multihead_attn(
-            cell.permute(1, 0, 2), cell.permute(1, 0, 2), cell.permute(1, 0, 2)
-        )
-        cell = attn_output.permute(1, 0, 2).contiguous()
+        output = None
+        if self.hparams.get("use_self_attn", False):
+            # query, key, value = target_x, context_x, d_encoded
+            output, _ = batch_first_attention(
+                self.multihead_attn, k=output, v=output, q=output
+            )
+            # output [batch, context+target_len, num_directions * hid dim ]
+
+        if self.hparams.get("use_cross_attn", False):
+            output, _ = batch_first_attention(
+                self.multihead_attn_cross, k=context_x, v=output, q=target_x
+            )
+            # output [batch, context_len, num_directions * hid dim]
+
+        if output is not None:
+            num_layers = h_out.shape[1]
+            print(cell.max(), h_out.max(), h.max())
+            h_out += h.mean(1).repeat(1, num_layers, 1)
+            cell += h.max(1).repeat(1, num_layers, 1)
 
         outputs, (_, _) = self.decoder(target_x, (h_out, cell))
         # output = [batch size, seq len, hid dim * n directions]
@@ -128,7 +144,12 @@ class Seq2SeqNet(nn.Module):
         y_pred = y_dist.rsample if self.training else y_dist.loc
         return (
             y_pred,
-            dict(loss=loss_p.mean(), loss_p=loss_p.mean(), loss_mse=loss_mse.mean(), loss_p_weighted=loss_p_weighted.mean()),
+            dict(
+                loss=loss_p.mean(),
+                loss_p=loss_p.mean(),
+                loss_mse=loss_mse.mean(),
+                loss_p_weighted=loss_p_weighted.mean(),
+            ),
             dict(log_sigma=log_sigma, y_dist=y_dist),
         )
 
@@ -140,11 +161,10 @@ class LSTMSeq2Seq_PL(PL_Seq2Seq):
     DEFAULT_ARGS = {
         "agg": "mean",
         "lstm_dropout": 0.22,
-        "hidden_size_power": 4.0,
+        "hidden_size_power": 6.0,
         "learning_rate": 0.001,
-        "lstm_layers": 4,
-        'bidirectional': False
-        
+        "lstm_layers": 3,
+        "bidirectional": False,
     }
 
     @staticmethod
@@ -167,7 +187,7 @@ class LSTMSeq2Seq_PL(PL_Seq2Seq):
             "input_size_decoder": 17,
             "context_in_target": False,
             "output_size": 1,
-            'min_std': 0.005,
+            "min_std": 0.005,
         }
         [trial.set_user_attr(k, v) for k, v in user_attrs_default.items()]
         [trial.set_user_attr(k, v) for k, v in user_attrs.items()]
