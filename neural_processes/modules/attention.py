@@ -4,6 +4,24 @@ from torch import nn
 import torch.nn.functional as F
 from .modules import BatchMLP
 
+
+def batch_first_attention(module: nn.MultiheadAttention, k, v, q, **kwargs):
+    """
+    Batch first attention 
+
+    [batch, seq, hidden] instead of [seq, batch, hidden]
+
+    see https://pytorch.org/docs/stable/nn.html#torch.nn.MultiheadAttention
+    """
+    assert isinstance(
+        module, nn.MultiheadAttention
+    ), f"should be nn.MultiheadAttention not {type(module)}"
+    q = q.permute(1, 0, 2)
+    k = k.permute(1, 0, 2)
+    v = v.permute(1, 0, 2)
+    attn_output, attn_output_weights = module(query=q, key=k, value=v, **kwargs)
+    return attn_output.permute(1, 0, 2).contiguous(), attn_output_weights
+
 class AttnLinear(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
@@ -118,8 +136,4 @@ class Attention(nn.Module):
 
     def _pytorch_multihead_attention(self, k, v, q):
         # Pytorch multiheaded attention takes inputs if diff order and permutation
-        q = q.permute(1, 0, 2)
-        k = k.permute(1, 0, 2)
-        v = v.permute(1, 0, 2)
-        o = self._W(q, k, v)[0]
-        return o.permute(1, 0, 2)
+        return batch_first_attention(self._w, q=q, k=k, v=v)[0]
