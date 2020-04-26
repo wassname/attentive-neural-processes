@@ -17,15 +17,15 @@ class PL_NeuralProcess(PL_Seq2Seq):
 
     DEFAULT_ARGS = {
         'dropout': 0.1,
-        'learning_rate': 0.004,
+        'learning_rate': 0.003,
         'attention_dropout': 0.5,
         'batchnorm': False,
         'attention_layers': 2,
         'det_enc_cross_attn_type': 'uniform',
         'det_enc_self_attn_type': 'uniform',
         'latent_enc_self_attn_type': 'uniform',
-        'num_heads_power': 3,
-        'hidden_dim_power': 3,
+        'num_heads_power': 2,
+        'hidden_dim_power': 6,
         'latent_dim_power': 5,
         'n_latent_encoder_layers': 3,
         'n_det_encoder_layers': 3,

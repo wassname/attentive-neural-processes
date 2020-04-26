@@ -38,7 +38,6 @@ class Seq2SeqNet(nn.Module):
     def __init__(self, hparams, _min_std=0.05):
         super().__init__()
         hparams = hparams_power(hparams)
-        print(hparams)
         self.hparams = hparams
         self._min_std = _min_std
 
@@ -107,7 +106,7 @@ class Seq2SeqNet(nn.Module):
 
         if output is not None:
             num_layers = h_out.shape[1]
-            print(cell.max(), h_out.max(), h.max())
+            # print(cell.max(), h_out.max(), h.max())
             h_out += h.mean(1).repeat(1, num_layers, 1)
             cell += h.max(1).repeat(1, num_layers, 1)
 

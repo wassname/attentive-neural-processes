@@ -63,6 +63,8 @@ class Attention(nn.Module):
                 dropout=dropout,
                 batchnorm=batchnorm,
             )
+        elif self._rep == "lstm":
+            self._lstm = LSTMBlock(x_dim, hidden_dim, batchnorm=batchnorm, dropout=dropout, num_layers=attention_layers)
 
         if attention_type == "uniform":
             self._attention_func = self._uniform_attention
@@ -95,6 +97,9 @@ class Attention(nn.Module):
         if self._rep == "mlp":
             k = self.batch_mlp_k(k)
             q = self.batch_mlp_q(q)
+        elif self._rep == "lstm":
+            k = self.batch_lstm(k)
+            q = self.batch_lstm(q)
         rep = self._attention_func(k, v, q)
         return rep
 

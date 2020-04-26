@@ -57,7 +57,7 @@ class PL_Seq2Seq(pl.LightningModule):
         train_outputs = agg_logs(self.train_logs)
         self.train_logs = []
 
-        print(f"step val {self.trainer.global_step}, {outputs} {train_outputs}")
+        logger.info(f"step val {self.trainer.global_step}, {outputs} {train_outputs}")
 
         # tensorboard_logs_str = {k: f"{v}" for k, v in tensorboard_logs.items()}
         # print(f"step {self.trainer.global_step}, {outputs}")

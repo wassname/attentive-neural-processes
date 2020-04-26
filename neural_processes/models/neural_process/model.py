@@ -309,11 +309,11 @@ class NeuralProcess(nn.Module):
         
         device = next(self.parameters()).device
         
-        if self.hparams.get('bnorm_inputs', True):
-            # https://stackoverflow.com/a/46772183/221742
-            target_x = self.norm_x(target_x)
-            context_x = self.norm_x(context_x)
-            context_y = self.norm_y(context_y)
+        # if self.hparams.get('bnorm_inputs', True):
+        # https://stackoverflow.com/a/46772183/221742
+        target_x = self.norm_x(target_x)
+        context_x = self.norm_x(context_x)
+        context_y = self.norm_y(context_y)
 
         if self._use_rnn:
             # see https://arxiv.org/abs/1910.09323 where x is substituted with h = RNN(x)

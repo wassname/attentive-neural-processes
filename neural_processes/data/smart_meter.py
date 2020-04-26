@@ -193,8 +193,8 @@ def get_smartmeter_df(indir=Path('./data/smart-meters-in-london'), max_files=60,
     test_files = [f for f in csv_files if is_test(f)]
     val_files = [f for f in csv_files if is_val(f) and (not is_test(f))]
     train_files = [f for f in csv_files if (not is_val(f)) and (not is_test(f))]
-    print(len(train_files), len(val_files), len(test_files))
-    print(train_files, val_files, test_files)
+    # print(len(train_files), len(val_files), len(test_files))
+    # print(train_files, val_files, test_files)
     assert not set(train_files).intersection(set(test_files), set(val_files))
     assert not set(test_files).intersection(set(val_files))
 

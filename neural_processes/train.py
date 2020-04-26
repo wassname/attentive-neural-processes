@@ -42,6 +42,7 @@ def main(
         val_percent_check=PERCENT_TEST_EXAMPLES,
         checkpoint_callback=checkpoint_callback,
         max_epochs=hparams["max_nb_epochs"],
+        weights_summary='top',
         gpus=-1 if torch.cuda.is_available() else None,
         early_stop_callback=PyTorchLightningPruningCallback(trial, monitor="val_loss")
         if prune
@@ -62,7 +63,7 @@ def objective(trial, PL_MODEL_CLS, name, user_attrs):
     trial = PL_MODEL_CLS.add_suggest(trial)
     [trial.set_user_attr(k, v) for k, v in user_attrs.items()]
 
-    print(dict(number=trial.number, params=trial.params, user_attrs=trial.user_attrs))
+    logger.debug(dict(number=trial.number, params=trial.params, user_attrs=trial.user_attrs))
 
     model, trainer = main(trial, PL_MODEL_CLS=PL_MODEL_CLS, name=name)
 
@@ -71,24 +72,24 @@ def objective(trial, PL_MODEL_CLS, name, user_attrs):
     if len(checkpoints):
         checkpoint = checkpoints[-1]
         device = next(model.parameters()).device
-        print(f"Loading checkpoint {checkpoint}")
+        logger.info(f"Loading checkpoint {checkpoint}")
         model = model.load_from_checkpoint(checkpoint).to(device)
     
     trainer.test(model)
 
     # also report to tensorboard & print
-    print("logger.metrics", model.logger.metrics[-1:])
+    logger.info("logger.metrics", model.logger.metrics[-1:])
     model.logger.experiment.add_hparams(trial.params, model.logger.metrics[-1])
     model.logger.save()
 
-    return model.logger.metrics[-1]["agg_test_loss"]
+    return model.logger.metrics[-1]["agg_test_score"]
 
 
 def add_number(trial: optuna.Trial, model_dir: Path):
     # For manual experiment we will start at -1 and deincr by 1
     versions = [int(s.stem.split("_")[-1]) for s in model_dir.glob("version_*")] + [-1]
     trial.number = min(versions) - 1
-    print("trial.number", trial.number)
+    # logger.debug("trial.number", trial.number)
     return trial
 
 
@@ -101,7 +102,7 @@ def run_trial(
     plot_from_loader=plot_from_loader,
     number=None,
 ):
-    print(f"now run `tensorboard --logdir {MODEL_DIR}`")
+    logger.info(f"now run `tensorboard --logdir {MODEL_DIR}`")
     (MODEL_DIR / name).mkdir(parents=True, exist_ok=True)
 
     if getattr(PL_MODEL_CLS, 'DEFAULT_ARGS', None):
@@ -121,7 +122,7 @@ def run_trial(
 
     # Add user attributes
     [trial.set_user_attr(k, v) for k, v in user_attrs.items()]
-    print('trial', trial.number, trial, trial.params, trial.user_attrs)
+    logger.info('trial number=%s trial=%s params=%s attrs=%s', trial.number, trial, trial.params, trial.user_attrs)
 
     model, trainer = main(
         trial, PL_MODEL_CLS, name=name, MODEL_DIR=MODEL_DIR, train=False, prune=False
@@ -132,7 +133,7 @@ def run_trial(
         try:
             trainer.fit(model)
         except KeyboardInterrupt:
-            print('KeyboardInterrupt, skipping rest of training')
+            logger.warning('KeyboardInterrupt, skipping rest of training')
             pass
 
         # Plot
@@ -151,7 +152,7 @@ def run_trial(
     if len(checkpoints):
         checkpoint = checkpoints[-1]
         device = next(model.parameters()).device
-        print(f"Loading checkpoint {checkpoint}")
+        logger.info(f"Loading checkpoint {checkpoint}")
         model = model.load_from_checkpoint(checkpoint).to(device)
 
         # Plot
@@ -162,11 +163,11 @@ def run_trial(
         plot_from_loader(model.test_dataloader(), model, i=670, title='test 670')
         plt.show()
     else:
-        print('no checkpoints')
+        logger.warning('no checkpoints')
 
     try:
         trainer.test(model)
     except KeyboardInterrupt:
-        print('KeyboardInterrupt, skipping rest of testing')
+        logger.warning('KeyboardInterrupt, skipping rest of testing')
         pass
     return trial, trainer, model
