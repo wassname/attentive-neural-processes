@@ -120,13 +120,14 @@ def run_trial(
     else:
         trial.number = number
 
+
     # Add user attributes
     [trial.set_user_attr(k, v) for k, v in user_attrs.items()]
-    logger.info('trial number=%s trial=%s params=%s attrs=%s', trial.number, trial, trial.params, trial.user_attrs)
-
     model, trainer = main(
         trial, PL_MODEL_CLS, name=name, MODEL_DIR=MODEL_DIR, train=False, prune=False
     )
+    logger.info('trial number=%s name=%s, trial=%s params=%s attrs=%s', trial.number, trainer.logger.name, trial, trial.params, trial.user_attrs)
+    
     
     checkpoints = sorted(Path(trainer.checkpoint_callback.dirpath).glob("*.ckpt"))
     if len(checkpoints)==0 or number is None:

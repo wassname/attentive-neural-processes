@@ -55,6 +55,16 @@ def agg_logs(outputs):
                 )
     return aggs
 
+def round_values(d):
+    """round values in dict to 2sf."""
+    def _round(v):
+        if isinstance(v, float):
+            return float(f"{v:.2g}")
+        elif isinstance(v, dict):
+            return round_values(v)
+        else:
+            return v
+    return {k: _round(v) for k, v in d.items()}
 
 def init_random_seed(seed):
     # https://pytorch.org/docs/stable/notes/randomness.html

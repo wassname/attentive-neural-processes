@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import numpy as np
 from matplotlib import pyplot as plt
 
-from .utils import ObjectDict, agg_logs
+from .utils import ObjectDict, agg_logs, round_values
 from .data.smart_meter import get_smartmeter_df, SmartMeterDataSet, collate_fns
 from .logger import logger
 from .plot import plot_from_loader, plot_from_loader_to_tensor
@@ -57,7 +57,7 @@ class PL_Seq2Seq(pl.LightningModule):
         train_outputs = agg_logs(self.train_logs)
         self.train_logs = []
 
-        logger.info(f"step val {self.trainer.global_step}, {outputs} {train_outputs}")
+        logger.info(f"val step={self.trainer.global_step}, val={round_values(outputs)} tain={round_values(train_outputs)}")
 
         # tensorboard_logs_str = {k: f"{v}" for k, v in tensorboard_logs.items()}
         # print(f"step {self.trainer.global_step}, {outputs}")
