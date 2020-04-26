@@ -43,7 +43,11 @@ class TransformerSeq2SeqNet(nn.Module):
         self._min_std = hparams.min_std
 
         hidden_out_size = self.hparams.hidden_out_size
-        self.enc_norm = BatchNormSequence(self.hparams.input_size)
+
+        # Sometimes input normalisation can be important, an initial batch norm is a nice way to ensure this https://stackoverflow.com/a/46772183/221742
+        self.enc_norm = BatchNormSequence(self.hparams.input_size, affine=False)
+        self.dec_norm = BatchNormSequence(self.hparams.input_size_decoder, affine=False)
+
         self.enc_emb = nn.Linear(self.hparams.input_size, hidden_out_size)
         encoder_norm = nn.LayerNorm(hidden_out_size)
         layer_enc = nn.TransformerEncoderLayer(
@@ -57,7 +61,6 @@ class TransformerSeq2SeqNet(nn.Module):
             layer_enc, num_layers=self.hparams.nlayers, norm=encoder_norm
         )
 
-        self.dec_norm = BatchNormSequence(self.hparams.input_size_decoder)
         self.dec_emb = nn.Linear(self.hparams.input_size_decoder, hidden_out_size)
         layer_dec = nn.TransformerDecoderLayer(
             d_model=hidden_out_size,

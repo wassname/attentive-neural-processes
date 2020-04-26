@@ -85,6 +85,7 @@ class PL_Seq2Seq(pl.LightningModule):
         # For test use a -logp only
         loss = -y_dist.log_prob(target_y).mean()
         tensorboard_logs = {"test_" + k: v for k, v in losses.items()}
+        tensorboard_logs["test_score"] = loss
         assert torch.isfinite(loss)
         return {"test_loss": loss, "log": tensorboard_logs}
 

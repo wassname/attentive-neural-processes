@@ -42,7 +42,10 @@ class Seq2SeqNet(nn.Module):
         self.hparams = hparams
         self._min_std = _min_std
 
-        self.norm_input = BatchNormSequence(self.hparams.input_size)
+        # Sometimes input normalisation can be important, an initial batch norm is a nice way to ensure this https://stackoverflow.com/a/46772183/221742
+        self.norm_input = BatchNormSequence(self.hparams.input_size, affine=False)
+        self.norm_target = BatchNormSequence(self.hparams.input_size_decoder, affine=False)
+
         self.encoder = nn.LSTM(
             input_size=self.hparams.input_size,
             hidden_size=self.hparams.hidden_size,
@@ -58,7 +61,6 @@ class Seq2SeqNet(nn.Module):
             self.hparams.hidden_size, num_heads=8
         )
 
-        self.norm_target = BatchNormSequence(self.hparams.input_size_decoder)
         self.decoder = nn.LSTM(
             input_size=self.hparams.input_size_decoder,
             hidden_size=self.hparams.hidden_size,

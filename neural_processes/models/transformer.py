@@ -22,7 +22,10 @@ class NetTransformer(nn.Module):
 
         hidden_out_size = self.hparams.hidden_out_size
         enc_x_dim = self.hparams.x_dim + self.hparams.y_dim
-        # self.enc_norm = BatchNormSequence(enc_x_dim)
+
+        # Sometimes input normalisation can be important, an initial batch norm is a nice way to ensure this https://stackoverflow.com/a/46772183/221742
+        self.enc_norm = BatchNormSequence(enc_x_dim, affine=False)
+        
         self.enc_emb = nn.Linear(enc_x_dim, hidden_out_size)
         encoder_norm = nn.LayerNorm(hidden_out_size)
         layer_enc = nn.TransformerEncoderLayer(
@@ -54,7 +57,7 @@ class NetTransformer(nn.Module):
         x = x.detach()
         x_key_padding_mask = ~x_mask.any(-1)
 
-        x = self.enc_emb(x).permute(1, 0, 2)
+        x = self.enc_emb(self.enc_norm(x)).permute(1, 0, 2)
         
         outputs = self.encoder(x, src_key_padding_mask=x_key_padding_mask).permute(
             1, 0, 2

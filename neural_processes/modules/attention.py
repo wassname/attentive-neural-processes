@@ -136,4 +136,4 @@ class Attention(nn.Module):
 
     def _pytorch_multihead_attention(self, k, v, q):
         # Pytorch multiheaded attention takes inputs if diff order and permutation
-        return batch_first_attention(self._w, q=q, k=k, v=v)[0]
+        return batch_first_attention(self._W, q=q, k=k, v=v)[0]
