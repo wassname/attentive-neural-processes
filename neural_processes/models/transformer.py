@@ -9,6 +9,7 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
 from neural_processes.lightning import PL_Seq2Seq
+from neural_processes.modules import BatchNormSequence
 from ..logger import logger
 from ..utils import hparams_power
 
@@ -25,7 +26,7 @@ class NetTransformer(nn.Module):
 
         # Sometimes input normalisation can be important, an initial batch norm is a nice way to ensure this https://stackoverflow.com/a/46772183/221742
         self.enc_norm = BatchNormSequence(enc_x_dim, affine=False)
-        
+
         self.enc_emb = nn.Linear(enc_x_dim, hidden_out_size)
         encoder_norm = nn.LayerNorm(hidden_out_size)
         layer_enc = nn.TransformerEncoderLayer(

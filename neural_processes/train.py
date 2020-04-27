@@ -78,7 +78,7 @@ def objective(trial, PL_MODEL_CLS, name, user_attrs):
     trainer.test(model)
 
     # also report to tensorboard & print
-    logger.info("logger.metrics", model.logger.metrics[-1:])
+    logger.info("logger.metrics %s", model.logger.metrics[-1:])
     model.logger.experiment.add_hparams(trial.params, model.logger.metrics[-1])
     model.logger.save()
 

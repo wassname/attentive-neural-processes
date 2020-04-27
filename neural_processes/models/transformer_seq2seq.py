@@ -27,7 +27,7 @@ import optuna
 from torchvision.transforms import ToTensor
 
 from neural_processes.data.smart_meter import get_smartmeter_df
-from neural_processes.modules import BatchNormSequence
+from neural_processes.modules import BatchNormSequence, LSTMBlock, NPBlockRelu2d
 
 from neural_processes.utils import ObjectDict
 from neural_processes.lightning import PL_Seq2Seq
@@ -43,16 +43,25 @@ class TransformerSeq2SeqNet(nn.Module):
         self._min_std = hparams.min_std
 
         hidden_out_size = self.hparams.hidden_out_size
+        y_size = self.hparams.input_size - self.hparams.input_size_decoder
+        x_size = self.hparams.input_size_decoder
 
         # Sometimes input normalisation can be important, an initial batch norm is a nice way to ensure this https://stackoverflow.com/a/46772183/221742
-        self.enc_norm = BatchNormSequence(self.hparams.input_size, affine=False)
-        self.dec_norm = BatchNormSequence(self.hparams.input_size_decoder, affine=False)
+        self.x_norm = BatchNormSequence(x_size, affine=False)
+        self.y_norm = BatchNormSequence(y_size, affine=False)
 
+        # TODO embedd both X's the same
+        if self.hparams.get('use_lstm', False):            
+            self.x_emb = LSTMBlock(x_size, x_size)
+            self.y_emb = LSTMBlock(y_size, y_size)
+        
         self.enc_emb = nn.Linear(self.hparams.input_size, hidden_out_size)
+        self.dec_emb = nn.Linear(self.hparams.input_size_decoder, hidden_out_size)
+        
         encoder_norm = nn.LayerNorm(hidden_out_size)
         layer_enc = nn.TransformerEncoderLayer(
             d_model=hidden_out_size,
-            dim_feedforward=self.hparams.hidden_size,
+            dim_feedforward=hidden_out_size*4,
             dropout=self.hparams.attention_dropout,
             nhead=self.hparams.nhead,
             # activation
@@ -60,11 +69,10 @@ class TransformerSeq2SeqNet(nn.Module):
         self.encoder = nn.TransformerEncoder(
             layer_enc, num_layers=self.hparams.nlayers, norm=encoder_norm
         )
-
-        self.dec_emb = nn.Linear(self.hparams.input_size_decoder, hidden_out_size)
+        
         layer_dec = nn.TransformerDecoderLayer(
             d_model=hidden_out_size,
-            dim_feedforward=self.hparams.hidden_size,
+            dim_feedforward=hidden_out_size*4,
             dropout=self.hparams.attention_dropout,
             nhead=self.hparams.nhead,
         )
@@ -72,8 +80,8 @@ class TransformerSeq2SeqNet(nn.Module):
         self.decoder = nn.TransformerDecoder(
             layer_dec, num_layers=self.hparams.nlayers, norm=decoder_norm
         )
-        self.mean = nn.Linear(hidden_out_size, self.hparams.output_size)
-        self.std = nn.Linear(hidden_out_size, self.hparams.output_size)
+        self.mean = NPBlockRelu2d(hidden_out_size, self.hparams.output_size)
+        self.std = NPBlockRelu2d(hidden_out_size, self.hparams.output_size)
         self._use_lvar = False
         # self._reset_parameters()
 
@@ -84,22 +92,77 @@ class TransformerSeq2SeqNet(nn.Module):
             if p.dim() > 1:
                 torch.nn.init.xavier_uniform_(p)
 
-    def forward(self, context_x, context_y, target_x, target_y=None):
+    def forward(self, context_x, context_y, target_x, target_y=None, mask_context=True, mask_target=True):
         device = next(self.parameters()).device
+
+        tgt_key_padding_mask = None
+        # if target_y is not None and mask_target:
+        #     # Mask nan's
+        #     target_mask = torch.isfinite(target_y)# & (target_y!=self.hparams.nan_value)
+        #     target_y[~target_mask] = 0
+        #     target_y = target_y.detach()
+        #     tgt_key_padding_mask = ~target_mask.any(-1)
+
+        src_key_padding_mask = None
+        # if mask_context:
+        #     # Mask nan's
+        #     context_mask = torch.isfinite(context_y)# & (context_y!=self.hparams.nan_value)
+        #     context_y[~context_mask] = 0
+        #     context_y = context_y.detach()
+        #     src_key_padding_mask = ~context_mask.any(-1)# * float('-inf')
+
+        # Norm
+        context_x = self.x_norm(context_x)
+        target_x = self.x_norm(target_x)
+        context_y = self.y_norm(context_y)
+        # if target_y is not None:
+        #     target_y = self.y_norm(target_y)
+
+        # LSTM
+        if self.hparams.get('use_lstm', False):  
+            context_x = self.x_emb(context_x)
+            target_x = self.x_emb(target_x)
+            # Size([B, C, X]) -> Size([B, C, X])
+            context_y = self.y_emb(context_y)
+            # Size([B, T, Y]) -> Size([B, T, Y])
+
+        
+        # Embed
         x = torch.cat([context_x, context_y], -1)
-        # Size([B, C, input_dim])
-        x = self.enc_emb(self.enc_norm(x)).permute(1, 0, 2)
-        # Size([C, B, emb_dim])
-        memory = self.encoder(x)
-        # Size([C, B, emb_dim])
-        target_x = self.dec_emb(self.dec_norm(target_x)).permute(1, 0, 2)
-        # Size([T, B, input_target_dim]) -> Size([B, T, emb_dim])
+        x = self.enc_emb(x)
+        # Size([B, C, X]) -> Size([B, C, hidden_dim])
+        target_x = self.dec_emb(target_x)
+        # Size([B, C, T]) -> Size([B, C, hidden_dim])
+
+        x = x.permute(1, 0, 2)  # (B,C,hidden_dim) -> (C,B,hidden_dim)
+        target_x = target_x.permute(1, 0, 2) 
+        # requires  (C, B, hidden_dim)
+        memory = self.encoder(x, src_key_padding_mask=src_key_padding_mask)
 
         # In transformers the memory and target_x need to be the same length. Lets use a permutation invariant agg on the context
         # Then expand it, so it's available as we decode, conditional on target_x
-        memory = memory.max(dim=0, keepdim=True)[0].expand_as(target_x)
+        # (C, B, emb_dim) -> (B, emb_dim) -> (T, B, emb_dim)
+        # In transformers the memory and target_x need to be the same length. Lets use a permutation invariant agg on the context
+        # Then expand it, so it's available as we decode, conditional on target_x
+        memory_max = memory.max(dim=0, keepdim=True)[0].expand_as(target_x)
+        memory_mean = memory.mean(dim=0, keepdim=True)[0].expand_as(target_x)
+        memory_last = memory[-1:, :, :].expand_as(target_x)
+        memory_all = memory_max + memory_last
+        if self.hparams.agg == 'max':
+            memory = memory_max
+        elif self.hparams.agg == 'last':
+            memory = memory_last
+        elif self.hparams.agg == 'all':
+            memory = memory_all
+        elif self.hparams.agg == 'mean':
+            memory = memory_mean
+        else:
+            raise Exception(f"hparams.agg should be in ['last', 'max', 'mean', 'all'] not '{self.hparams.agg}''")
 
-        outputs = self.decoder(target_x, memory).permute(1, 0, 2).contiguous()
+        outputs = self.decoder(target_x, memory, tgt_key_padding_mask=tgt_key_padding_mask)
+        
+        # [T, B, emb_dim] -> [B, T, emb_dim]
+        outputs = outputs.permute(1, 0, 2).contiguous()
         # Size([B, T, emb_dim])
         mean = self.mean(outputs)
         log_sigma = self.std(outputs)
@@ -145,9 +208,10 @@ class TransformerSeq2Seq_PL(PL_Seq2Seq):
         "attention_dropout": 0.2,
         "hidden_out_size_power": 4,
         "hidden_size_power": 5,
-        "learning_rate": 0.006,
+        "learning_rate": 0.002,
         "nhead_power": 3,
         "nlayers": 2,
+        "use_lstm": False
     }
 
     @staticmethod
@@ -175,6 +239,8 @@ class TransformerSeq2Seq_PL(PL_Seq2Seq):
         trial.suggest_discrete_uniform("hidden_out_size_power", 4, 9, 1)
         trial.suggest_discrete_uniform("nhead_power", 1, 4, 1)
         trial.suggest_int("nlayers", 1, 12)
+        trial.suggest_categorical("use_lstm", [False, True])
+        trial.suggest_categorical("agg", ['last', 'max', 'mean', 'all'])   
 
         user_attrs_default = {
             "batch_size": 16,
