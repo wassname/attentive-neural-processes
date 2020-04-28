@@ -32,3 +32,35 @@ def test_agg_logs():
     assert 'agg_val_loss' in r.keys()
     assert 'agg_val_loss_kl' in r['log'].keys()
     assert isinstance(r['agg_val_loss'], float)
+
+
+def test_round_values():
+    r = neural_processes.utils.round_values({'a': 0.00004, {'b': 124455.45, 'c': 1e-4,}, 'l': 500})
+
+
+def test_hparams_power():
+    r = neural_processes.utils.hparams_power({'test_power': 2, 'test2': 2})
+    assert r['test'] == 2 ** 2
+    assert r['test2'] == 2
+
+
+def test_log_prob_sigma():
+    mean = torch.zeros(4, 5)
+    log_scale = torch.ones(4, 5)
+    value = torch.zeros(4, 5)
+    y_dist = torch.distributions.Normal(mean, log_scale.exp())
+    r1 = y_dist.log_prob(values)
+    r2 = neural_processes.utils.log_prob_sigma(value, loc, log_scale)
+    assert (r1==r2).all()
+
+def test_kl_loss_var():
+    prior_mu = torch.zeros(4, 5)
+    post_mu = torch.zeros(4, 5) + 1
+    log_var_prior = torch.ones(4, 5)
+    log_var_post = torch.ones(4, 5) + 1
+    dist_prior = torch.distributions.Normal(prior_mu, log_var_prior.exp())
+    dist_post = torch.distributions.Normal(post_mu, log_var_post.exp())
+    r1 = torch.distributions.kl_divergence(
+                        dist_post, dist_prior).mean(-1)
+    r2 = neural_processes.utils.kl_loss_var(prior_mu, log_var_prior, post_mu, log_var_post)
+    assert (r1==r2).all()

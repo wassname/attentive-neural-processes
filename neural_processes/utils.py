@@ -179,3 +179,4 @@ def kl_loss_var(prior_mu, log_var_prior, post_mu, log_var_post):
     )
     kl_div = 0.5 * kl_div
     return kl_div
+
