@@ -35,7 +35,7 @@ def test_agg_logs():
 
 
 def test_round_values():
-    r = neural_processes.utils.round_values({'a': 0.00004, {'b': 124455.45, 'c': 1e-4,}, 'l': 500})
+    r = neural_processes.utils.round_values({'a': 0.00004, 'd': {'b': 124455.45, 'c': 0.004}, 'l': 500})
 
 
 def test_hparams_power():
