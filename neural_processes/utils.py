@@ -178,5 +178,6 @@ def kl_loss_var(prior_mu, log_var_prior, post_mu, log_var_post):
         - var_ratio_log
     )
     kl_div = 0.5 * kl_div
+    logger.warning('seems to be an error in kl_loss_var, dont use it')
     return kl_div
 
