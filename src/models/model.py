@@ -136,7 +136,10 @@ class LatentModel(nn.Module):
 
         if target_y is not None:
             dist_post, log_var_post = self._latent_encoder(target_x, target_y)
-            z = dist_post.loc
+            if self.training:
+                z = dist_post.loc
+            else:
+                z = dist_prior.loc
         else:
             z = dist_prior.loc
 
