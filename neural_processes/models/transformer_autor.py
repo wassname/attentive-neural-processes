@@ -129,7 +129,6 @@ class TransformerAutoR_PL(PL_Seq2Seq):
         "attention_dropout": 0.2,
         "dropout": 0.2,
         "hidden_out_size_power": 4,
-        "hidden_size_power": 5,
         "learning_rate": 2e-3,
         "nhead_power": 3,
         "nlayers": 6,
@@ -158,7 +157,6 @@ class TransformerAutoR_PL(PL_Seq2Seq):
         trial.suggest_uniform("dropout", 0, 0.75)
         # we must have nhead<==hidden_size
         # so           nhead_power.max()<==hidden_size_power.min()
-        trial.suggest_discrete_uniform("hidden_size_power", 4, 10, 1)
         trial.suggest_discrete_uniform("hidden_out_size_power", 4, 9, 1)
         trial.suggest_discrete_uniform("nhead_power", 1, 4, 1)
         trial.suggest_int("nlayers", 1, 12)

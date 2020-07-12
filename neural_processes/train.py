@@ -44,7 +44,7 @@ def main(
         checkpoint_callback=checkpoint_callback,
         max_epochs=hparams["max_nb_epochs"],
         weights_summary='top',
-        gpus=-1 if (torch.cuda.is_available() and device=="cuda") else None,
+        gpus=-1 if (torch.cuda.is_available() and device!="cpu") else None,
         early_stop_callback=PyTorchLightningPruningCallback(trial, monitor="val_loss")
         if prune
         else EarlyStopping(
@@ -74,7 +74,7 @@ def objective(trial, PL_MODEL_CLS, name, user_attrs):
         checkpoint = checkpoints[-1]
         device = next(model.parameters()).device
         logger.info(f"Loading checkpoint {checkpoint}")
-        model = model.load_from_checkpoint(checkpoint).to(device)
+        model = model.load_from_checkpoint(str(checkpoint)).to(device)
     
     trainer.test(model)
 
@@ -156,7 +156,7 @@ def run_trial(
         checkpoint = checkpoints[-1]
         device = next(model.parameters()).device
         logger.info(f"Loading checkpoint {checkpoint}")
-        model = model.load_from_checkpoint(checkpoint).to(device)
+        model = model.load_from_checkpoint(str(checkpoint)).to(device)
 
         # Plot
         plot_from_loader(model.val_dataloader(), model, i=670, title='val 670')

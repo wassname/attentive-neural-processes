@@ -39,8 +39,8 @@ def plot_rows(
         context_y_rows = np.exp(context_y_rows) - eps
 
     # I don't want to show too much context
-    context_y_rows = context_y_rows[-96:]
-    x_context_rows = x_context_rows[-96:]
+    context_y_rows = context_y_rows[-48*2:]
+    x_context_rows = x_context_rows[-48*2:]
 
     # Plot everything
     j = 0
