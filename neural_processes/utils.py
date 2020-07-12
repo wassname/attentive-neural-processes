@@ -6,6 +6,7 @@ import torch
 import math
 import torch
 import optuna
+from pytorch_lightning.loggers.base import merge_dicts
 from .logger import logger
 
 
@@ -65,6 +66,12 @@ def round_values(d):
         else:
             return v
     return {k: _round(v) for k, v in d.items()}
+
+def torch_mean(x):
+    return torch.mean(torch.tensor(x).cpu())
+
+def merge_dict_torch(outputs): 
+    return merge_dicts(outputs, default_func=torch_mean)
 
 def init_random_seed(seed):
     # https://pytorch.org/docs/stable/notes/randomness.html

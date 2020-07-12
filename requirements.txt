@@ -4,9 +4,11 @@
 # external requirements
 torch>=1.3.0
 tqdm
-pandas
+pandas>=1.0.0
 numpy
 torchsummaryX>=2.0
-pytorch_lightning==0.7.1
+pytorch_lightning==0.8.5
 tensorboardX
-optuna
+optuna==1.3.0
+pytorch-fast-transformers==0.1.3
+diskcache

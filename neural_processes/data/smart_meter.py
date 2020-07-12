@@ -22,8 +22,8 @@ def collate_fns(max_num_context, max_num_extra_target, sample, sort=True, contex
         y = np.stack([y for x, y in batch], 0)
 
         # Sample a subset of random size
-        num_context = np.random.randint(4, max_num_context)
-        num_extra_target = np.random.randint(4, max_num_extra_target)
+        num_context = np.random.randint(100, max_num_context)
+        num_extra_target = np.random.randint(100, max_num_extra_target)
 
         x = torch.from_numpy(x).float()
         y = torch.from_numpy(y).float()

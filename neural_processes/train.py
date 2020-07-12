@@ -18,6 +18,7 @@ def main(
     MODEL_DIR: Path = Path("./lightning_logs"),
     train=True,
     prune=True,
+    device=None,
     PERCENT_TEST_EXAMPLES=0.5,
 ):
     # PyTorch Lightning will try to restore model parameters from previous trials if checkpoint
@@ -43,7 +44,7 @@ def main(
         checkpoint_callback=checkpoint_callback,
         max_epochs=hparams["max_nb_epochs"],
         weights_summary='top',
-        gpus=-1 if torch.cuda.is_available() else None,
+        gpus=-1 if (torch.cuda.is_available() and device=="cuda") else None,
         early_stop_callback=PyTorchLightningPruningCallback(trial, monitor="val_loss")
         if prune
         else EarlyStopping(
@@ -98,6 +99,7 @@ def run_trial(
     PL_MODEL_CLS: pl.LightningModule,
     params: dict = {},
     user_attrs: dict = {},
+    device=None,
     MODEL_DIR: Path = Path("./lightning_logs"),
     plot_from_loader=plot_from_loader,
     number=None,
@@ -124,7 +126,7 @@ def run_trial(
     # Add user attributes
     [trial.set_user_attr(k, v) for k, v in user_attrs.items()]
     model, trainer = main(
-        trial, PL_MODEL_CLS, name=name, MODEL_DIR=MODEL_DIR, train=False, prune=False
+        trial, PL_MODEL_CLS, name=name, MODEL_DIR=MODEL_DIR, train=False, prune=False, device=device,
     )
     logger.info('trial number=%s name=%s, trial=%s params=%s attrs=%s', trial.number, trainer.logger.name, trial, trial.params, trial.user_attrs)
     

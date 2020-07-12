@@ -93,7 +93,7 @@ def plot_from_loader(
     loader, model, i=0, undo_log=False, title="", plot=True, legend=False, context_in_target=None
 ):
     if context_in_target is None:
-        context_in_target = model.hparams["context_in_target"]
+        context_in_target = model.hparams.get("context_in_target", False)
     
     device = next(model.parameters()).device
     data = loader.collate_fn([loader.dataset[i]], sample=False)

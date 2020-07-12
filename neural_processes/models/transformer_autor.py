@@ -25,7 +25,6 @@ import io
 import PIL
 import optuna
 from torchvision.transforms import ToTensor
-
 import fast_transformers
 from fast_transformers.builders import TransformerEncoderBuilder
 
@@ -38,7 +37,7 @@ from neural_processes.logger import logger
 from neural_processes.utils import hparams_power
 
 
-class TransformerSeq2SeqAutoRNet(nn.Module):
+class TransformerAutoRNet(nn.Module):
     def __init__(self, hparams):
         super().__init__()
         hparams = hparams_power(hparams)
@@ -46,38 +45,18 @@ class TransformerSeq2SeqAutoRNet(nn.Module):
         self._min_std = hparams.min_std
 
         hidden_out_size = self.hparams.hidden_out_size
-        y_size = self.hparams.input_size - self.hparams.input_size_decoder
-        x_size = self.hparams.input_size_decoder
-
+        x_size = self.hparams.x_dim + self.hparams.y_dim
+        
         # Sometimes input normalisation can be important, an initial batch norm is a nice way to ensure this https://stackoverflow.com/a/46772183/221742
-        self.x_norm = BatchNormSequence(x_size, affine=False)
-        self.y_norm = BatchNormSequence(y_size, affine=False)
+        self.enc_norm = BatchNormSequence(x_size, affine=False)
 
         # TODO embedd both X's the same
         if self.hparams.get('use_lstm', False):            
             self.x_emb = LSTMBlock(x_size, x_size)
-            self.y_emb = LSTMBlock(y_size, y_size)
         
         n_heads = self.hparams.nhead
-        self.enc_emb = nn.Linear(self.hparams.input_size, hidden_out_size*n_heads)
-#         print(-1, self.hparams.input_size, hidden_out_size)
-        self.dec_emb = nn.Linear(self.hparams.input_size_decoder, hidden_out_size*n_heads)
-        
-        
+        self.enc_emb = nn.Linear(x_size, hidden_out_size*n_heads)
         self.encoder = fast_transformers.builders.TransformerEncoderBuilder.from_kwargs(
-            attention_type="full",
-            n_layers=self.hparams.nlayers,
-            n_heads=n_heads,
-            feed_forward_dimensions=hidden_out_size*4,
-            query_dimensions=hidden_out_size,
-            value_dimensions=hidden_out_size,
-            activation="gelu",
-            attention_dropout=self.hparams.attention_dropout,
-            dropout=self.hparams.dropout,
-        ).get()
-        
-        hidden_out_size *= 2
-        self.decoder = fast_transformers.builders.TransformerEncoderBuilder.from_kwargs(
             attention_type="improved-causal",
             n_layers=self.hparams.nlayers,
             n_heads=n_heads,
@@ -93,40 +72,30 @@ class TransformerSeq2SeqAutoRNet(nn.Module):
 
     def forward(self, context_x, context_y, target_x, target_y=None, mask_context=True, mask_target=True):
         device = next(self.parameters()).device
-
+        
+        target_y_fake = (
+            torch.ones(context_y.shape[0], target_x.shape[1], context_y.shape[2]).float().to(device) * self.hparams.nan_value
+        )
+        context = torch.cat([context_x, context_y], -1).detach()
+        target = torch.cat([target_x, target_y_fake], -1).detach()
+        x = torch.cat([context, target * 1], 1).detach()
+        
         # Norm
-        context_x = self.x_norm(context_x)
-        target_x = self.x_norm(target_x)
-        context_y = self.y_norm(context_y)
-
+        x = self.enc_norm(x)
+        
         # LSTM
         if self.hparams.get('use_lstm', False):  
-            context_x = self.x_emb(context_x)
-            target_x = self.x_emb(target_x)
-            # Size([B, C, X]) -> Size([B, C, X])
-            context_y = self.y_emb(context_y)
+            x = self.x_emb(x)
             # Size([B, T, Y]) -> Size([B, T, Y])
-
+        
         # Embed
-        x = torch.cat([context_x, context_y], -1)
         x = self.enc_emb(x)
-        # Size([B, C, X]) -> Size([B, C, hidden_dim])
-        target_x = self.dec_emb(target_x)
-        # Size([B, C, T]) -> Size([B, C, hidden_dim])
         
         # requires  (B, C, hidden_dim)
-        memory = self.encoder(x)
-
-        # In transformers the memory and target_x need to be the same length. Lets use a permutation invariant agg on the context
-        # Then expand it, so it's available as we decode, conditional on target_x
-        # (C, B, emb_dim) -> (B, emb_dim) -> (T, B, emb_dim)
-        # In transformers the memory and target_x need to be the same length. Lets use a permutation invariant agg on the context
-        # Then expand it, so it's available as we decode, conditional on target_x
-        memory = memory_last = memory[:, -1:, :].expand_as(target_x)
-        x2 = torch.cat([target_x, memory], -1)
-        N = x2.shape[1]
+        steps = context_y.shape[1]
+        N = x.shape[1]
         mask = fast_transformers.masking.TriangularCausalMask(N, device=device)
-        outputs = self.decoder(x2, attn_mask=mask)
+        outputs = self.encoder(x, attn_mask=mask)[:, steps:, :]
         
         # Size([B, T, emb_dim])
         mean = self.mean(outputs)
@@ -152,8 +121,8 @@ class TransformerSeq2SeqAutoRNet(nn.Module):
         )
 
 
-class TransformerSeq2SeqAutoR_PL(PL_Seq2Seq):
-    def __init__(self, hparams, MODEL_CLS=TransformerSeq2SeqAutoRNet, **kwargs):
+class TransformerAutoR_PL(PL_Seq2Seq):
+    def __init__(self, hparams, MODEL_CLS=TransformerAutoRNet, **kwargs):
         super().__init__(hparams, MODEL_CLS=MODEL_CLS, **kwargs)
 
     DEFAULT_ARGS = {
@@ -164,7 +133,7 @@ class TransformerSeq2SeqAutoR_PL(PL_Seq2Seq):
         "learning_rate": 2e-3,
         "nhead_power": 3,
         "nlayers": 6,
-        "use_lstm": False
+        "use_lstm": False,
     }
 
     @staticmethod
@@ -208,6 +177,7 @@ class TransformerSeq2SeqAutoR_PL(PL_Seq2Seq):
             "output_size": 1,
             "patience": 3,
             'min_std': 0.005,
+            "nan_value": -99.9,
         }
         [trial.set_user_attr(k, v) for k, v in user_attrs_default.items()]
         [trial.set_user_attr(k, v) for k, v in user_attrs.items()]
