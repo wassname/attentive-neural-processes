@@ -15,7 +15,7 @@ def npsample_batch(x, y, size=None, sort=True):
         inds.sort()
     return x[:, inds], y[:, inds]
 
-def collate_fns(max_num_context, max_num_extra_target, sample, sort=True, context_in_target=True):
+def collate_fns(max_num_context, max_num_extra_target, sample, sort=True, context_in_target=False):
     def collate_fn(batch, sample=sample):
         # Collate
         x = np.stack([x for x, y in batch], 0)

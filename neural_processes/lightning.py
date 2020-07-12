@@ -28,74 +28,63 @@ class PL_Seq2Seq(pl.LightningModule):
         # TODO make data source configurable
 
     def forward(self, *args, **kwargs):
-        return self._model(*args, **kwargs)
+        y_dist, losses, extra = self._model(*args, **kwargs)
+        assert torch.isfinite(losses["loss"])
+        return y_dist, losses, extra
 
+    # steps
     def training_step(self, batch, batch_idx):
-        # REQUIRED
-        assert all(torch.isfinite(d).all() for d in batch)
-        context_x, context_y, target_x, target_y = batch
-        y_dist, losses, extra = self.forward(context_x, context_y, target_x, target_y)
+        y_dist, losses, extra = self.forward(*batch)
         tensorboard_logs = {"train_" + k: v for k, v in losses.items()}
-        assert torch.isfinite(tensorboard_logs["train_loss"])
-        return {"loss": tensorboard_logs['train_loss'], "log": tensorboard_logs}
+        return {"loss": losses["loss"], "log": tensorboard_logs}
 
     def validation_step(self, batch, batch_idx):
-        context_x, context_y, target_x, target_y = batch
-        assert all(torch.isfinite(d).all() for d in batch)
-        y_dist, losses, extra = self.forward(context_x, context_y, target_x, target_y)
+        y_dist, losses, extra = self.forward(*batch)
         tensorboard_logs = {"val_" + k: v for k, v in losses.items()}
-        assert torch.isfinite(tensorboard_logs["val_loss"])
-        return {"val_loss": tensorboard_logs["val_loss"], "log": tensorboard_logs}
-
-    def validation_end(self, outputs):
-        if int(self.hparams["vis_i"]) > 0:
-            self.show_image()
-
-        outputs = agg_logs(outputs)
-
-        # agg and print self.train_logs HACK https://github.com/PyTorchLightning/pytorch-lightning/issues/100
-        train_outputs = agg_logs(self.train_logs)
-        self.train_logs = []
-
-        logger.info(f"val step={self.trainer.global_step}, val={round_values(outputs)} tain={round_values(train_outputs)}")
-
-        # tensorboard_logs_str = {k: f"{v}" for k, v in tensorboard_logs.items()}
-        # print(f"step {self.trainer.global_step}, {outputs}")
-        return {"val_loss": outputs["agg_val_loss"], "train_loss": train_outputs.get("agg_train_loss", None), "log": {**train_outputs.get("log", {}), **outputs["log"]}}
-
-
-    def show_image(self):        
-        # https://github.com/PytorchLightning/pytorch-lightning/blob/f8d9f8f/pytorch_lightning/core/lightning.py#L293
-        loader = self.val_dataloader()
-        vis_i = min(int(self.hparams["vis_i"]), len(loader.dataset))
-        # print('vis_i', vis_i)
-        if isinstance(self.hparams["vis_i"], str):
-            image = plot_from_loader(loader, self, i=int(vis_i))
-            plt.show()
-        else:
-            image = plot_from_loader_to_tensor(loader, self, i=vis_i)
-            self.logger.experiment.add_image('val/image', image, self.trainer.global_step)
+        return {"val_loss": losses["loss"], "log": tensorboard_logs}
 
     def test_step(self, batch, batch_idx):
-        pred, losses, extra = self.forward(*batch)
-
-        context_x, context_y, target_x, target_y = batch
-        y_dist = extra['y_dist']
-
-        # For test use a -logp only
-        loss = -y_dist.log_prob(target_y).mean()
+        y_dist, losses, extra = self.forward(*batch)
         tensorboard_logs = {"test_" + k: v for k, v in losses.items()}
-        tensorboard_logs["test_score"] = loss
-        assert torch.isfinite(loss)
-        return {"test_loss": loss, "log": tensorboard_logs}
+        return {"test_loss": losses["loss"], "log": tensorboard_logs}
 
-    def test_end(self, outputs):
-
-        outputs = agg_logs(outputs)
+    # epoch ends
+    def _epoch_end(self, outputs, name):
+        outputs = [o.get("log", o) for o in outputs]
+        outputs = merge_dict_torch(outputs)
         logger.info(
-            f"step {self.trainer.global_step}, {outputs}"
+            f"{name} step={self.trainer.global_step}, outputs={round_values(outputs)}"
         )
-        return {"test_loss": outputs["agg_test_loss"], "log": outputs["log"]}
+        return {
+            f"{name}_loss": outputs.get(f"{name}_loss"),
+            "log": outputs,
+        }
+
+    def training_epoch_end(self, outputs):
+        if int(self.hparams.vis_i) > 0:
+            self.show_image(loader = self.train_dataloader(), title='train ')
+        return self._epoch_end(outputs, "train")
+
+    def test_epoch_end(self, outputs):
+        return self._epoch_end(outputs, "test")
+
+    def validation_epoch_end(self, outputs):
+        outputs = self._epoch_end(outputs, "val")
+        if int(self.hparams.vis_i) > 0:
+            self.show_image(loader = self.val_dataloader(), title='val ')
+        return outputs
+
+    def show_image(self, loader, title=''):        
+        # https://github.com/PytorchLightning/pytorch-lightning/blob/f8d9f8f/pytorch_lightning/core/lightning.py#L293
+        vis_i = min(int(self.hparams["vis_i"]), len(loader.dataset))
+        if isinstance(self.hparams["vis_i"], str):
+            # if it's a string we show
+            image = plot_from_loader(loader, self, i=int(vis_i), title=f'{title}, step={self.trainer.global_step}')
+            plt.show()
+        else:
+            # if it's a int we send to tensorboard
+            image = plot_from_loader_to_tensor(loader, self, i=vis_i)
+            self.logger.experiment.add_image('val/image', image, self.trainer.global_step)
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(self.parameters(), lr=self.hparams["learning_rate"])
@@ -129,7 +118,7 @@ class PL_Seq2Seq(pl.LightningModule):
             batch_size=self.hparams["batch_size"],
             # shuffle=True,
             collate_fn=collate_fns(
-                self.hparams["num_context"], self.hparams["num_extra_target"], sample=True, context_in_target=self.hparams["context_in_target"]
+                self.hparams["num_context"], self.hparams["num_extra_target"], sample=True
             ),
             sampler=sampler,
             num_workers=self.hparams["num_workers"],
@@ -151,7 +140,7 @@ class PL_Seq2Seq(pl.LightningModule):
             # shuffle=False,
             sampler=sampler,
             collate_fn=collate_fns(
-                self.hparams["num_context"], self.hparams["num_extra_target"], sample=False, context_in_target=self.hparams["context_in_target"]
+                self.hparams["num_context"], self.hparams["num_extra_target"], sample=False
             ),
             num_workers=self.hparams["num_workers"],
         )
@@ -170,7 +159,7 @@ class PL_Seq2Seq(pl.LightningModule):
             batch_size=self.hparams["batch_size"],
             # shuffle=False,
             collate_fn=collate_fns(
-                self.hparams["num_context"], self.hparams["num_extra_target"], sample=False, context_in_target=self.hparams["context_in_target"]
+                self.hparams["num_context"], self.hparams["num_extra_target"], sample=False
             ),
             sampler=sampler,
             num_workers=self.hparams["num_workers"],
