@@ -95,8 +95,8 @@ class PL_Seq2Seq(pl.LightningModule):
 
     def _get_cache_dfs(self):
         if self._dfs is None:
-            df_train, df_val, df_test = get_smartmeter_df()
-            self._dfs = dict(df_train=df_train, df_val=df_val, df_test=df_test)
+            df_train, df_test = get_smartmeter_df()
+            self._dfs = dict(df_train=df_train, df_test=df_test)
         return self._dfs
 
     @pl.data_loader
@@ -126,7 +126,7 @@ class PL_Seq2Seq(pl.LightningModule):
 
     @pl.data_loader
     def val_dataloader(self):
-        df_test = self._get_cache_dfs()['df_val']
+        df_test = self._get_cache_dfs()['df_test']
         data_test = SmartMeterDataSet(
             df_test, self.hparams["num_context"], self.hparams["num_extra_target"]
         )

@@ -88,8 +88,8 @@ class TransformerSeq2SeqAutoRNet(nn.Module):
             attention_dropout=self.hparams.attention_dropout,
             dropout=self.hparams.dropout,
         ).get()
-        self.mean = NPBlockRelu2d(hidden_out_size*n_heads, self.hparams.output_size)
-        self.std = NPBlockRelu2d(hidden_out_size*n_heads, self.hparams.output_size)
+        self.mean = nn.Linear(hidden_out_size*n_heads, self.hparams.output_size)
+        self.std = nn.Linear(hidden_out_size*n_heads, self.hparams.output_size)
 
     def forward(self, context_x, context_y, target_x, target_y=None, mask_context=True, mask_target=True):
         device = next(self.parameters()).device

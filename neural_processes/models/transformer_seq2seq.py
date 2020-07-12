@@ -80,8 +80,8 @@ class TransformerSeq2SeqNet(nn.Module):
         self.decoder = nn.TransformerDecoder(
             layer_dec, num_layers=self.hparams.nlayers, norm=decoder_norm
         )
-        self.mean = NPBlockRelu2d(hidden_out_size, self.hparams.output_size)
-        self.std = NPBlockRelu2d(hidden_out_size, self.hparams.output_size)
+        self.mean = nn.Linear(hidden_out_size, self.hparams.output_size)
+        self.std = nn.Linear(hidden_out_size, self.hparams.output_size)
         self._use_lvar = False
         # self._reset_parameters()
 
