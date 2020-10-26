@@ -210,7 +210,7 @@ class NeuralProcess(nn.Module):
                  n_latent_encoder_layers=2,
                  n_det_encoder_layers=2, # number of deterministic encoder layers
                  n_decoder_layers=2,
-                 use_deterministic_path=False,
+                 use_deterministic_path=True,
                  min_std=0.01, # To avoid collapse use a minimum standard deviation, should be much smaller than variation in labels
                  dropout=0,
                  use_self_attn=False,
