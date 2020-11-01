@@ -98,7 +98,9 @@ This has a better calibrated uncertainty and a better fit
 
 ## Experiment: Comparing models on toy 1d regression
 
-I put some work into replicating the behaviour shown in the [original deepmind tensorflow notebook](https://github.com/deepmind/neural-processes/blob/master/attentive_neural_process.ipynb). At the same time I compared multiple models.
+I put some work into replicating the behaviour shown in the [original deepmind tensorflow notebook](https://github.com/3springs/attentive-neural-processes/blob/RANPfSD/anp-rnn_1d_regression.ipynb). At the same time I compared multiple models.
+
+Note this is in the RANPfSD branch.
 
 ### Results
 
@@ -119,7 +121,7 @@ Compare deepmind:
 
 ![](docs/deepmind1.png)
 
-And this repo with an ANP (anp_1d_regression.ipynb)
+And this repo with an ANP (https://github.com/3springs/attentive-neural-processes/blob/RANPfSD/anp-rnn_1d_regression.ipynb)
 
 ![](docs/replicate2.png)
 
