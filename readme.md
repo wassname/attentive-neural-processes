@@ -1,31 +1,29 @@
-# Neural Processes for sequential data
+# Neural Processes for Sequential Data
 
-This repo implements ["Recurrent Attentive Neural Process for Sequential Data"](https://arxiv.org/abs/1910.09323) (ANP-RNN) on a toy regression problem. And also tests it on real smart meter data.
+This repository houses an implementation of the ["Recurrent Attentive Neural Process for Sequential Data"](https://arxiv.org/abs/1910.09323) (ANP-RNN), tested on a toy regression problem and real smart meter data.
 
-![](docs/anp-rnn_4.png)
+![ANP-RNN Diagram](docs/anp-rnn_4.png)
 
-This repository has lots of options so you can run it as a ANP-RNN, or ANP or NP.
+The repository provides options for running as an ANP-RNN, ANP, or NP.
 
-- Models
-  - ANP-RNN ["Recurrent Attentive Neural Process for Sequential Data"](https://arxiv.org/abs/1910.09323) 
+- Models:
+  - ANP-RNN: ["Recurrent Attentive Neural Process for Sequential Data"](https://arxiv.org/abs/1910.09323)
   - ANP: [Attentive Neural Processes](https://arxiv.org/abs/1901.05761)
   - NP: [Neural Processes](https://arxiv.org/abs/1807.01622)
   - LSTM
+
 - Experiments:
   - Monte Carlo Dropout
+
 - Data:
-  - Toy 1d regression
+  - Toy 1D regression
   - Power prediction problem
 
+Numerous tweaks have been made for flexibility and stability, including a [replication of the DeepMind ANP results](anp_1d_regression.ipynb) in PyTorch. This replication appears to be a better qualitative match than other PyTorch versions of ANP (as of 2019-11-01). See also section for other code repositories.
 
-I've also made lots of tweaks for flexibility and stability and [replicated the DeepMind ANP results](anp_1d_regression.ipynb) in pytorch. The replication qualitatively seems like a better match than the other pytorch versions of ANP (as of 2019-11-01). You can see other code repositories in the see also section.
+The code is not extensively documented due to limited usage. If you are using it and find it confusing, please raise a GitHub issue and we can enhance the documentation together.
 
-It's not heavily documented, because most of my code never gets read or used. If you are using it, and it's confusing, make a github issue are we will add comments or docs together.
 
-```sh
-git clone
-git-lfs pull
-```
 
 
 - [Neural Processes for sequential data](#neural-processes-for-sequential-data)
@@ -163,10 +161,16 @@ For more details see the notebook [./smartmeters-ANP-RNN-mcdropout.ipynb](./smar
 
 ## Usage
 
-- clone this repository
-- see requirements.txt for requirements and version
-- Start and run the notebook [smartmeters.ipynb](smartmeters-ANP-RNN.ipynb)
-- To see a toy 1d regression problem, look at [anp-rnn_1d_regression.ipynb](anp-rnn_1d_regression.ipynb)
+1. Clone this repository.
+  
+  ```sh
+  git clone
+  git-lfs pull
+  ```
+
+3. Refer to requirements.txt for software requirements and versions.
+4. Run the notebook [smartmeters.ipynb](smartmeters-ANP-RNN.ipynb).
+5. For a toy 1D regression problem, refer to [anp-rnn_1d_regression.ipynb](anp-rnn_1d_regression.ipynb).
 
 ### Smartmeter Data
 - Some data is included, you can get more from https://www.kaggle.com/jeanmidev/smart-meters-in-london/version/11
@@ -180,7 +184,7 @@ For more details see the notebook [./smartmeters-ANP-RNN-mcdropout.ipynb](./smar
 
 ### Code
 
-This is based on the code listed in the next section, with some changes. The most notable ones add stability, others are to make sure it can handle predicting into the future:
+The code is based on the code listed in the next section, with modifications for stability and to ensure it can handle future predictions. Notable changes include:
 
 Changes for a sequential/predictive use case:
 - target points are always in the future, context is in the past
